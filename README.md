@@ -10,10 +10,11 @@ A high-performance, native macOS and Windows desktop AI assistant built with **R
 
 ## Pictures
 
-### MacOS (eAI)
+### eAI (MacOS)
 <img width="1806" height="1228" alt="image" src="https://github.com/user-attachments/assets/893cde54-0a94-40c0-9c2c-05d9daacde71" />
+**Note:** Regular eAI will come out for Windows on a later date im currently fixing the bugs with the eAI Lite.
 
-### Windows (eAI Lite)
+### eAI Lite (Windows and MacOS)
 <img width="2078" height="1432" alt="image" src="https://github.com/user-attachments/assets/4800f503-9d16-4df6-b771-c21f49562f79" />
 
 ---
