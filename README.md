@@ -1,5 +1,5 @@
 # eAI and eAI Lite
-**NOT OUT YET STILL DEVELOPING**
+**NOT FULLY STABLE STILL DEVELOPING**
 
 A high-performance, native macOS and Windows desktop AI assistant built with **Rust**, **eframe/egui**, and **tokio**, featuring a sleek macOS-inspired dark mode interface and real-time local model streaming via **Ollama**.
 
