@@ -6,7 +6,6 @@ A high-performance, native macOS and Windows desktop AI assistant built with **R
 ## Pictures
 
 ### MacOS (eAI)
-<img width="1444" height="696" alt="aaadagda" src="https://github.com/user-attachments/assets/94c5645f-6860-4bf7-8bc9-16407e47e2b3" />
 <img width="1806" height="1228" alt="image" src="https://github.com/user-attachments/assets/893cde54-0a94-40c0-9c2c-05d9daacde71" />
 
 ### Windows (eAI Lite)
