@@ -1,7 +1,7 @@
 # eAI and eAI Lite
 **NOT FULLY STABLE STILL DEVELOPING**
 
-You can use the code to improve my app i dont mind this project is for hobby and not for any earnings,
+You can use the source code to improve my application or modify it i dont mind if you do so, this project is for hobby and not for any earnings whatsoever,
 contact me in discord if you see any bugs or errors!
 **@realjustero**
 
