@@ -1,5 +1,6 @@
 # eAI and eAI Lite
 **NOT FULLY STABLE STILL DEVELOPING**
+https://discord.gg/k9as2fGMES
 
 You can use the source code to improve my application or modify it i dont mind if you do so, this project is for hobby and not for any earnings whatsoever,
 contact me in discord if you see any bugs or errors!
