@@ -1,6 +1,11 @@
 # eAI and eAI Lite
 **NOT FULLY STABLE STILL DEVELOPING**
 
+You can use the code to improve my app i dont mind this project is for hobby and not for any earnings.
+Contact me in discord if you see any bugs or errors!
+**@realjustero**
+
+
 A high-performance, native macOS and Windows desktop AI assistant built with **Rust**, **eframe/egui**, and **tokio**, featuring a sleek macOS-inspired dark mode interface and real-time local model streaming via **Ollama**.
 
 ## Pictures
