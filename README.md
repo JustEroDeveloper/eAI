@@ -6,7 +6,7 @@ contact me in discord if you see any bugs or errors!
 **@realjustero**
 
 
-A high-performance, native macOS and Windows desktop AI assistant built with **Rust**, **eframe/egui**, and **tokio**, featuring a sleek macOS-inspired dark mode interface and real-time local model streaming via **Ollama**.
+A high-performance and privacy-focused, native macOS and Windows Local AI built with **Rust**, **eframe/egui**, **Swift** and **tokio**, featuring a sleek macOS-inspired dark mode interface and real-time local model streaming via **Ollama**.
 
 ## Pictures
 
