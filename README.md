@@ -16,7 +16,7 @@ A high-performance and privacy-focused, native macOS and Windows Local AI built 
 Note: Regular eAI will come out for Windows on a later date im currently fixing the bugs with the eAI Lite.
 
 ### eAI Lite (Windows and MacOS)
-<img width="2078" height="1432" alt="image" src="https://github.com/user-attachments/assets/4800f503-9d16-4df6-b771-c21f49562f79" />
+<img width="2064" height="1436" alt="image" src="https://github.com/user-attachments/assets/7d7d1ab4-10ca-4b6b-9edd-c167f632e0d9" />
 
 ---
 
