@@ -1,4 +1,3 @@
-use crate::data::data_dir;
 use eframe::egui;
 use image::{codecs::ico::IcoEncoder, ExtendedColorType, RgbaImage};
 
@@ -96,12 +95,12 @@ pub fn app_icon() -> egui::IconData {
 /// Writes a multi-size Windows .ico (16 to 256 px) into Documents/eAI/AppIcon.
 /// Each size is drawn fresh from the logo code, so small sizes stay sharp.
 pub fn export_ico() -> Result<std::path::PathBuf, String> {
-    let root = data_dir().join("AppIcon");
+    let root = crate::data::base_dir().join("AppIcon");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let path = root.join("eAI-Lite.ico");
 
     let mut frames = Vec::new();
-    for s in [16u32, 32, 48, 64, 128, 256] {
+    for s in [16u32, 20, 24, 32, 40, 48, 64, 128, 256] {
         let img = render_rgba(s);
         let frame =
             image::codecs::ico::IcoFrame::as_png(img.as_raw(), s, s, ExtendedColorType::Rgba8)
@@ -125,7 +124,7 @@ pub fn export_ico() -> Result<std::path::PathBuf, String> {
 #[cfg(target_os = "macos")]
 #[allow(dead_code)]
 pub fn export_mac_pngs() -> Result<std::path::PathBuf, String> {
-    let root = data_dir().join("AppIcon").join("mac");
+    let root = crate::data::base_dir().join("AppIcon").join("mac");
     std::fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     for s in [16u32, 32, 64, 128, 256, 512, 1024] {
         render_rgba(s)

@@ -1,3 +1,6 @@
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
+mod account;
 mod chat;
 mod data;
 mod draw;
@@ -6,6 +9,7 @@ mod markdown;
 mod net;
 mod ui;
 
+use account::Account;
 use chat::Job;
 use data::*;
 use eframe::egui;
@@ -110,6 +114,15 @@ pub struct App {
     pub copied: Option<(Uuid, f64)>,
     pub rename_model: Option<String>,
     pub rename_text: String,
+    // Profiles and sign-in
+    pub accounts: Vec<Account>,
+    pub current_user: Option<Uuid>,
+    pub auth_register: bool,
+    pub auth_name: String,
+    pub auth_password: String,
+    pub auth_confirm: String,
+    pub auth_error: String,
+    pub auth_selected: Option<Uuid>,
 }
 
 impl App {
@@ -117,20 +130,32 @@ impl App {
         ui::setup_fonts(&cc.egui_ctx);
         cc.egui_ctx.set_visuals(ui::visuals());
 
-        let settings = load_settings();
-        let (tx, rx) = mpsc::channel();
+        // Windows draws a light title bar by default. Match the app's dark UI.
+        #[cfg(target_os = "windows")]
+        cc.egui_ctx
+            .send_viewport_cmd(egui::ViewportCommand::SetTheme(egui::SystemTheme::Dark));
 
-        let mut app = App {
+        let accounts = account::load_accounts();
+        let auth_register = accounts.is_empty();
+        let auth_name = if auth_register {
+            legacy_user_name().unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let (tx, rx) = mpsc::channel();
+        let settings = Settings::default();
+
+        App {
             saved: settings.clone(),
             models: vec![settings.model.clone()],
             settings,
-            sessions: load_sessions(),
+            sessions: Vec::new(),
             active: None,
             prompt: String::new(),
             attached_image: None,
             models_status: String::new(),
             searx_status: String::new(),
-            avatar: ui::load_avatar(&cc.egui_ctx),
+            avatar: None,
             tx,
             rx,
             generating: None,
@@ -160,9 +185,140 @@ impl App {
             copied: None,
             rename_model: None,
             rename_text: String::new(),
+            accounts,
+            current_user: None,
+            auth_register,
+            auth_name,
+            auth_password: String::new(),
+            auth_confirm: String::new(),
+            auth_error: String::new(),
+            auth_selected: None,
+        }
+    }
+
+    pub fn signed_in(&self) -> bool {
+        self.current_user.is_some()
+    }
+
+    /// Opens a profile and loads only that person's settings and chats.
+    pub fn sign_in(&mut self, id: Uuid, ctx: &egui::Context) {
+        let Some(account) = self.accounts.iter().find(|a| a.id == id).cloned() else {
+            return;
         };
-        app.refresh_models(&cc.egui_ctx);
-        app
+        set_active_profile(Some(id));
+        self.current_user = Some(id);
+
+        let mut settings = load_settings();
+        settings.user_name = account.name.clone();
+        self.settings = settings;
+        self.saved = self.settings.clone();
+        save_settings(&self.settings);
+
+        self.sessions = load_sessions();
+        self.active = None;
+        self.prompt.clear();
+        self.attached_image = None;
+        self.avatar = ui::load_avatar(ctx);
+        self.panel = Panel::Chat;
+        self.settings_tab = SettingsTab::General;
+        self.generating = None;
+        self.cancel = Arc::new(AtomicBool::new(false));
+        self.auth_password.clear();
+        self.auth_confirm.clear();
+        self.auth_error.clear();
+        self.auth_selected = None;
+        self.want_focus = true;
+        self.refresh_models(ctx);
+    }
+
+    /// Creates a local profile and signs into it.
+    pub fn register(&mut self, ctx: &egui::Context) -> Result<(), String> {
+        let name = self.auth_name.trim().to_string();
+        if name.is_empty() {
+            return Err("Please enter a name.".into());
+        }
+        if name.chars().count() > 32 {
+            return Err("Please use 32 characters or fewer.".into());
+        }
+        if self
+            .accounts
+            .iter()
+            .any(|a| a.name.eq_ignore_ascii_case(&name))
+        {
+            return Err("That name is already taken.".into());
+        }
+
+        let (salt, password) = if self.auth_password.is_empty() {
+            (String::new(), None)
+        } else {
+            if self.auth_password.chars().count() < 4 {
+                return Err("Password must be at least 4 characters.".into());
+            }
+            if self.auth_password != self.auth_confirm {
+                return Err("Passwords do not match.".into());
+            }
+            let salt = account::new_salt();
+            let hash = account::hash_password(&self.auth_password, &salt);
+            (salt, Some(hash))
+        };
+
+        let id = Uuid::new_v4();
+        let first_account = self.accounts.is_empty();
+        if first_account {
+            migrate_legacy_data(id);
+        }
+        self.accounts.push(Account {
+            id,
+            name,
+            salt,
+            password,
+        });
+        account::save_accounts(&self.accounts);
+        self.auth_name.clear();
+        self.sign_in(id, ctx);
+        Ok(())
+    }
+
+    /// Saves the current chats and returns to the profile screen.
+    pub fn sign_out(&mut self) {
+        if self.generating.is_some() {
+            self.stop();
+        }
+        self.sync_account_name();
+        save_settings(&self.settings);
+        self.save_chats();
+        set_active_profile(None);
+        self.current_user = None;
+        self.settings = Settings::default();
+        self.saved = self.settings.clone();
+        self.sessions.clear();
+        self.active = None;
+        self.avatar = None;
+        self.prompt.clear();
+        self.attached_image = None;
+        self.panel = Panel::Chat;
+        self.settings_tab = SettingsTab::General;
+        self.generating = None;
+        self.auth_register = self.accounts.is_empty();
+        self.auth_selected = None;
+        self.auth_name.clear();
+        self.auth_password.clear();
+        self.auth_confirm.clear();
+        self.auth_error.clear();
+    }
+
+    fn sync_account_name(&mut self) {
+        let Some(id) = self.current_user else { return };
+        let name = self.settings.user_name.trim().to_string();
+        if name.is_empty() {
+            return;
+        }
+        if let Some(account) = self.accounts.iter_mut().find(|a| a.id == id) {
+            if account.name != name {
+                account.name = name;
+                account::save_accounts(&self.accounts);
+            }
+        }
     }
 
     pub fn active_session(&self) -> Option<&Session> {
@@ -220,6 +376,11 @@ impl App {
         let now = chrono::Local::now()
             .format("%A, %B %e, %Y %H:%M")
             .to_string();
+        let user = if self.settings.user_name.trim().is_empty() {
+            "the user".to_string()
+        } else {
+            self.settings.user_name.clone()
+        };
         let mut s = format!(
             "You are {APP_NAME}, a high-performance desktop assistant created for {}, running on model {}.\n\
              CURRENT DATE: {now}.\nRULES:\n\
@@ -229,7 +390,7 @@ impl App {
              - Use Markdown headings, bullet lists, numbered lists, and tables where they make the answer clearer.\n\
              - If an image is attached, describe and analyze it based on what is actually visible.\n\
              - Never guess financial data, exchange rates, or prices without explicit search data.",
-            self.settings.user_name, self.settings.model
+            user, self.settings.model
         );
         let extra = self.settings.instructions.trim();
         if !extra.is_empty() {
@@ -479,24 +640,40 @@ impl eframe::App for App {
         while let Ok(ev) = self.rx.try_recv() {
             self.handle(ev);
         }
-        if self.settings != self.saved {
-            save_settings(&self.settings);
-            self.saved = self.settings.clone();
+        if self.signed_in() {
+            if self.settings != self.saved {
+                save_settings(&self.settings);
+                self.saved = self.settings.clone();
+            }
+            self.sync_account_name();
         }
         ui::render(self, ctx);
     }
 }
 
 fn main() -> eframe::Result<()> {
+    let base = egui::ViewportBuilder::default()
+        .with_title(APP_NAME)
+        .with_icon(icon::app_icon());
+
+    // macOS gets the borderless, full-height look. Windows keeps its native
+    // title bar (so the system window buttons and edge resizing work) and a
+    // smaller default size that fits scaled laptop displays.
+    #[cfg(target_os = "macos")]
+    let viewport = base
+        .with_inner_size([1040.0, 720.0])
+        .with_min_inner_size([850.0, 600.0])
+        .with_title_shown(false)
+        .with_titlebar_shown(false)
+        .with_fullsize_content_view(true);
+
+    #[cfg(not(target_os = "macos"))]
+    let viewport = base
+        .with_inner_size([980.0, 600.0])
+        .with_min_inner_size([780.0, 520.0]);
+
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1040.0, 720.0])
-            .with_min_inner_size([850.0, 600.0])
-            .with_title(APP_NAME)
-            .with_title_shown(false)
-            .with_titlebar_shown(false)
-            .with_fullsize_content_view(true)
-            .with_icon(icon::app_icon()),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(APP_NAME, options, Box::new(|cc| Ok(Box::new(App::new(cc)))))

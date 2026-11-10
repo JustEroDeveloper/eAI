@@ -17,6 +17,7 @@ rfd = "0.14"
 base64 = "0.22"
 regex = "1"
 open = "5"
+sha2 = "0.10"
 
 [build-dependencies]
 winres = "0.1"

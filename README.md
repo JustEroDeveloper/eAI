@@ -16,12 +16,13 @@ A high-performance and privacy-focused, native macOS and Windows Local AI built 
 Note: Regular eAI will come out for Windows on a later date im currently fixing the bugs with the eAI Lite.
 
 ### eAI Lite (Windows and MacOS)
-<img width="2064" height="1436" alt="image" src="https://github.com/user-attachments/assets/7d7d1ab4-10ca-4b6b-9edd-c167f632e0d9" />
+<img width="2078" height="1432" alt="image" src="https://github.com/user-attachments/assets/4800f503-9d16-4df6-b771-c21f49562f79" />
 
 ---
 
 ## Features
 
+* **Local Profiles:** A first-run profile picker with an optional password keeps each person's chats, avatar and settings separate on the same machine.
 * **Native macOS Aesthetics:** Custom dark-mode theme designed to mirror modern macOS design guidelines, including split sidebar chat history, capsule input bars, and polished message bubbles.
 * **Local LLM Integration:** Connects directly to a local [Ollama](https://ollama.com/) instance for privacy-focused, lightning-fast inference.
 * **Real-time Streaming:** Asynchronous message streaming via Tokio channels and `reqwest` for smooth, typewriter-style response generation.

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Mutex;
 use uuid::Uuid;
 
 pub const APP_NAME: &str = "eAI Lite";
@@ -26,7 +27,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            user_name: "Erol".into(),
+            user_name: String::new(),
             model: "llama3.2:latest".into(),
             thinking: true,
             max_tokens: 4096,
@@ -126,13 +127,74 @@ impl Default for Session {
 }
 
 pub fn data_dir() -> PathBuf {
+    match active_profile() {
+        Some(id) => profile_dir(id),
+        // Nothing is read or written until a profile is signed in,
+        // but this keeps every path valid just in case.
+        None => base_dir().join("profiles").join("local"),
+    }
+}
+
+/// Shared application folder, used for accounts and the exported app icon.
+pub fn base_dir() -> PathBuf {
     dirs::document_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("eAI")
 }
 
+pub fn profile_dir(id: Uuid) -> PathBuf {
+    base_dir().join("profiles").join(id.simple().to_string())
+}
+
+static ACTIVE_PROFILE: Mutex<Option<Uuid>> = Mutex::new(None);
+
+pub fn set_active_profile(id: Option<Uuid>) {
+    if let Ok(mut guard) = ACTIVE_PROFILE.lock() {
+        *guard = id;
+    }
+}
+
+pub fn active_profile() -> Option<Uuid> {
+    ACTIVE_PROFILE.lock().ok().and_then(|guard| *guard)
+}
+
 pub fn avatar_path() -> PathBuf {
-    data_dir().join("avatars").join("user.png")
+    data_dir().join("avatar.png")
+}
+
+/// Copies chats, settings and avatar from the old single-user layout into the
+/// first profile. The originals are left untouched so nothing can be lost.
+pub fn migrate_legacy_data(id: Uuid) {
+    let root = base_dir();
+    let dst = profile_dir(id);
+    let _ = std::fs::create_dir_all(&dst);
+
+    for name in ["settings.json", "conversations.json"] {
+        let from = root.join(name);
+        let to = dst.join(name);
+        if from.exists() && !to.exists() {
+            let _ = std::fs::copy(from, to);
+        }
+    }
+
+    let old_avatar = root.join("avatars").join("user.png");
+    let new_avatar = dst.join("avatar.png");
+    if old_avatar.exists() && !new_avatar.exists() {
+        let _ = std::fs::copy(old_avatar, new_avatar);
+    }
+}
+
+/// Reads the name from the old single-user settings file, if there is one.
+/// Used to pre-fill the first-run form instead of a hard-coded name.
+pub fn legacy_user_name() -> Option<String> {
+    let text = std::fs::read_to_string(base_dir().join("settings.json")).ok()?;
+    let settings: Settings = serde_json::from_str(&text).ok()?;
+    let name = settings.user_name.trim().to_string();
+    if name.is_empty() || name == "Erol" {
+        None
+    } else {
+        Some(name)
+    }
 }
 
 pub fn load_settings() -> Settings {

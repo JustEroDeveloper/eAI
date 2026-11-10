@@ -1,3 +1,4 @@
+use crate::account::Account;
 use crate::data::*;
 use crate::draw::*;
 use crate::markdown;
@@ -227,6 +228,14 @@ fn switch(ui: &mut Ui, on: &mut bool) {
     );
 }
 
+fn shortcut(key: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("⌘{key}")
+    } else {
+        format!("Ctrl+{key}")
+    }
+}
+
 fn heading(ui: &mut Ui, text: &str) {
     ui.add_space(8.0);
     ui.label(RichText::new(text).font(semi(11.0)).color(TEXT_SEC));
@@ -286,9 +295,347 @@ fn slot_editor(ui: &mut Ui, slots: &mut Vec<String>, active: &mut usize, new_val
     });
 }
 
+// ---------- Profiles ----------
+
+fn primary_button(ui: &mut Ui, label: &str) -> bool {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let hover = ui.ctx().animate_bool(resp.id, resp.hovered());
+    ui.painter().rect_filled(
+        rect,
+        Rounding::same(9.0),
+        mix(ACCENT, Color32::from_rgb(74, 160, 255), hover),
+    );
+    ui.painter().text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        label,
+        semi(14.0),
+        Color32::WHITE,
+    );
+    resp.clicked()
+}
+
+fn text_link(ui: &mut Ui, label: &str) -> bool {
+    ui.add(Label::new(RichText::new(label).size(12.0).color(ACCENT)).sense(Sense::click()))
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+        .clicked()
+}
+
+fn field_label(ui: &mut Ui, text: &str) {
+    ui.label(RichText::new(text).font(semi(10.0)).color(TEXT_SEC));
+}
+
+fn auth_error(ui: &mut Ui, message: &str) {
+    if message.is_empty() {
+        return;
+    }
+    Frame::none()
+        .fill(Color32::from_rgb(60, 30, 33))
+        .stroke(st(1.0, Color32::from_rgb(120, 52, 58)))
+        .rounding(Rounding::same(8.0))
+        .inner_margin(Margin::symmetric(10.0, 8.0))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                RichText::new(message)
+                    .size(11.5)
+                    .color(Color32::from_rgb(255, 150, 150)),
+            );
+        });
+    ui.add_space(8.0);
+}
+
+fn account_row(ui: &mut Ui, account: &Account, selected: bool) -> egui::Response {
+    let (rect, resp) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 50.0), Sense::click());
+    let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+    let hover = ui.ctx().animate_bool(resp.id, resp.hovered());
+    let p = ui.painter();
+    if selected || hover > 0.0 {
+        p.rect_filled(
+            rect,
+            Rounding::same(10.0),
+            if selected {
+                select()
+            } else {
+                Color32::from_white_alpha((10.0 * hover) as u8)
+            },
+        );
+    }
+    let center = Pos2::new(rect.left() + 28.0, rect.center().y);
+    avatar_circle(p, center, 34.0, &initial_of(&account.name));
+    p.text(
+        Pos2::new(rect.left() + 54.0, rect.center().y - 8.0),
+        Align2::LEFT_CENTER,
+        &account.name,
+        semi(13.0),
+        TEXT,
+    );
+    let sub = if account.has_password() {
+        "Password protected"
+    } else {
+        "Click to sign in"
+    };
+    p.text(
+        Pos2::new(rect.left() + 54.0, rect.center().y + 9.0),
+        Align2::LEFT_CENTER,
+        sub,
+        reg(10.5),
+        TEXT_SEC,
+    );
+    if account.has_password() {
+        p.text(
+            Pos2::new(rect.right() - 12.0, rect.center().y),
+            Align2::RIGHT_CENTER,
+            "•••",
+            reg(11.0),
+            TEXT_TER,
+        );
+    }
+    resp
+}
+
+fn auth_screen(app: &mut App, ctx: &egui::Context) {
+    ctx.request_repaint_after(Duration::from_millis(60));
+    let mut do_login: Option<Uuid> = None;
+    let mut do_register = false;
+    let mut go_login = false;
+    let mut go_register = false;
+
+    egui::CentralPanel::default()
+        .frame(Frame::none().fill(WINDOW_BG))
+        .show(ctx, |ui| {
+            ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        let t = ui.input(|i| i.time) as f32;
+                        ui.add_space(56.0);
+
+                        let pulse = (t * 2.0).sin() * 0.5 + 0.5;
+                        let (r, _) =
+                            ui.allocate_exact_size(Vec2::new(64.0, 56.0), Sense::hover());
+                        sparkles(
+                            ui.painter(),
+                            r.center(),
+                            18.0,
+                            0.55 + 0.45 * pulse,
+                            None,
+                            pulse,
+                        );
+                        ui.add_space(10.0);
+                        gradient_title(ui, APP_NAME, 26.0, t);
+                        ui.add_space(6.0);
+                        let subtitle = if app.auth_register {
+                            "Create a local profile to get started."
+                        } else {
+                            "Choose your profile to continue."
+                        };
+                        ui.label(RichText::new(subtitle).size(13.0).color(TEXT_SEC));
+                        ui.add_space(24.0);
+
+                        let card_w =
+                            400.0_f32.min((ui.available_width() - 32.0).max(280.0));
+                        Frame::none()
+                            .fill(CARD)
+                            .stroke(st(1.0, Color32::from_white_alpha(18)))
+                            .rounding(Rounding::same(16.0))
+                            .inner_margin(Margin::symmetric(24.0, 22.0))
+                            .show(ui, |ui| {
+                                ui.set_width(card_w - 48.0);
+                                if app.auth_register {
+                                    auth_register_form(
+                                        app,
+                                        ui,
+                                        &mut do_register,
+                                        &mut go_login,
+                                    );
+                                } else {
+                                    auth_login_form(app, ui, &mut do_login, &mut go_register);
+                                }
+                            });
+
+                        ui.add_space(18.0);
+                        ui.label(
+                            RichText::new(format!(
+                                "eAI Lite {} · everything stays on this device",
+                                env!("CARGO_PKG_VERSION")
+                            ))
+                            .size(10.0)
+                            .color(TEXT_TER),
+                        );
+                        ui.add_space(40.0);
+                    });
+                });
+        });
+
+    if go_login {
+        app.auth_register = false;
+        app.auth_selected = None;
+        app.auth_password.clear();
+        app.auth_confirm.clear();
+        app.auth_error.clear();
+    }
+    if go_register {
+        app.auth_register = true;
+        app.auth_selected = None;
+        app.auth_password.clear();
+        app.auth_confirm.clear();
+        app.auth_error.clear();
+    }
+
+    if do_register {
+        if let Err(err) = app.register(ctx) {
+            app.auth_error = err;
+        }
+    }
+
+    if let Some(id) = do_login {
+        let ok = app
+            .accounts
+            .iter()
+            .find(|a| a.id == id)
+            .map(|a| a.verify(&app.auth_password))
+            .unwrap_or(false);
+        if ok {
+            app.sign_in(id, ctx);
+        } else {
+            app.auth_error = "Wrong password. Please try again.".into();
+            app.auth_password.clear();
+        }
+    }
+}
+
+fn auth_register_form(app: &mut App, ui: &mut Ui, submit: &mut bool, go_login: &mut bool) {
+    ui.style_mut().visuals.extreme_bg_color = Color32::from_rgb(29, 29, 31);
+    ui.spacing_mut().item_spacing.y = 8.0;
+    let enter = ui.input(|i| i.key_pressed(Key::Enter));
+
+    auth_error(ui, &app.auth_error);
+
+    field_label(ui, "YOUR NAME");
+    let name = ui.add(
+        TextEdit::singleline(&mut app.auth_name)
+            .hint_text("What should I call you?")
+            .desired_width(f32::INFINITY)
+            .margin(Vec2::new(10.0, 8.0)),
+    );
+    if app.want_focus {
+        name.request_focus();
+        app.want_focus = false;
+    }
+
+    ui.add_space(10.0);
+    field_label(ui, "PASSWORD (OPTIONAL)");
+    ui.add(
+        TextEdit::singleline(&mut app.auth_password)
+            .hint_text("Leave blank for no password")
+            .password(true)
+            .desired_width(f32::INFINITY)
+            .margin(Vec2::new(10.0, 8.0)),
+    );
+    if !app.auth_password.is_empty() {
+        ui.add_space(6.0);
+        ui.add(
+            TextEdit::singleline(&mut app.auth_confirm)
+                .hint_text("Confirm password")
+                .password(true)
+                .desired_width(f32::INFINITY)
+                .margin(Vec2::new(10.0, 8.0)),
+        );
+    } else {
+        ui.label(
+            RichText::new("A password is only needed if others use this computer.")
+                .size(10.0)
+                .color(TEXT_TER),
+        );
+    }
+
+    ui.add_space(14.0);
+    if primary_button(ui, "Create profile") {
+        *submit = true;
+    }
+    if enter {
+        *submit = true;
+    }
+
+    if !app.accounts.is_empty() {
+        ui.add_space(10.0);
+        ui.vertical_centered(|ui| {
+            if text_link(ui, "I already have a profile") {
+                *go_login = true;
+            }
+        });
+    }
+}
+
+fn auth_login_form(app: &mut App, ui: &mut Ui, submit: &mut Option<Uuid>, go_register: &mut bool) {
+    ui.style_mut().visuals.extreme_bg_color = Color32::from_rgb(29, 29, 31);
+    ui.spacing_mut().item_spacing.y = 8.0;
+    let enter = ui.input(|i| i.key_pressed(Key::Enter));
+    let accounts = app.accounts.clone();
+
+    auth_error(ui, &app.auth_error);
+    field_label(ui, "PROFILES");
+
+    for account in &accounts {
+        let selected = app.auth_selected == Some(account.id);
+        if account_row(ui, account, selected).clicked() {
+            if account.has_password() {
+                app.auth_selected = Some(account.id);
+                app.auth_password.clear();
+                app.auth_error.clear();
+            } else {
+                *submit = Some(account.id);
+            }
+        }
+    }
+
+    let selected = app
+        .auth_selected
+        .and_then(|id| accounts.iter().find(|a| a.id == id));
+    if let Some(account) = selected {
+        if account.has_password() {
+            ui.add_space(10.0);
+            field_label(ui, "PASSWORD");
+            let password = ui.add(
+                TextEdit::singleline(&mut app.auth_password)
+                    .hint_text("Enter your password")
+                    .password(true)
+                    .desired_width(f32::INFINITY)
+                    .margin(Vec2::new(10.0, 8.0)),
+            );
+            if app.want_focus {
+                password.request_focus();
+                app.want_focus = false;
+            }
+            ui.add_space(14.0);
+            if primary_button(ui, "Sign in") {
+                *submit = Some(account.id);
+            }
+            if enter {
+                *submit = Some(account.id);
+            }
+        }
+    }
+
+    ui.add_space(12.0);
+    ui.vertical_centered(|ui| {
+        if text_link(ui, "Create a new profile") {
+            *go_register = true;
+        }
+    });
+}
+
 // ---------- Frame ----------
 
 pub fn render(app: &mut App, ctx: &egui::Context) {
+    if !app.signed_in() {
+        auth_screen(app, ctx);
+        return;
+    }
+
     let busy = app.generating.is_some();
     ctx.request_repaint_after(Duration::from_millis(if busy { 33 } else { 60 }));
     shortcuts(app, ctx);
@@ -447,7 +794,7 @@ fn sidebar(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.add_space(6.0);
-            if icon_button(ui, icon_sidebar, "Hide sidebar (⌘B)") {
+            if icon_button(ui, icon_sidebar, &format!("Hide sidebar ({})", shortcut("B"))) {
                 app.show_sidebar = false;
             }
         });
@@ -1597,6 +1944,11 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                     let (r, _) = ui.allocate_exact_size(Vec2::splat(64.0), Sense::hover());
                     avatar_at(ui, app.avatar.as_ref(), r, &initial);
                     ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new("Display name")
+                                .size(10.0)
+                                .color(TEXT_SEC),
+                        );
                         ui.add(
                             TextEdit::singleline(&mut app.settings.user_name).desired_width(240.0),
                         );
@@ -1612,6 +1964,24 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                     });
                 });
             });
+
+            heading(ui, "ACCOUNT");
+            card(ui, |ui| {
+                ui.label(
+                    RichText::new(
+                        "Signing out returns you to the profile picker. This profile's chats stay saved.",
+                    )
+                    .size(12.0)
+                    .color(TEXT_SEC),
+                );
+                ui.add_space(8.0);
+                if ui.button("Sign out").clicked() {
+                    app.sign_out();
+                }
+            });
+            if !app.signed_in() {
+                return;
+            }
 
             heading(ui, "CHAT");
             card(ui, |ui| {
@@ -1771,7 +2141,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
             heading(ui, "APP ICON (WINDOWS)");
             card(ui, |ui| {
                 ui.label(
-                    RichText::new("Exports eAI-Lite.ico with 16, 32, 48, 64, 128 and 256 px frames, made from your icon image, into Documents/eAI/AppIcon.")
+                    RichText::new("Exports eAI-Lite.ico with sharp 16–256 px frames, made from your icon image, into Documents/eAI/AppIcon.")
                         .size(12.0)
                         .color(TEXT_SEC),
                 );
@@ -1794,7 +2164,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                         .color(TEXT_SEC),
                 );
                 ui.add_space(8.0);
-                if ui.button("Open Data Folder").clicked() {
+                if ui.button("Open Profile Folder").clicked() {
                     let _ = std::fs::create_dir_all(data_dir());
                     let _ = open::that(data_dir());
                 }
