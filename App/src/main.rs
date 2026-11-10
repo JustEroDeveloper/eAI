@@ -60,6 +60,7 @@ pub enum Panel {
 pub enum SettingsTab {
     General,
     Models,
+    Api,
     Ollama,
     Search,
     Instructions,
@@ -494,7 +495,13 @@ impl App {
             cancel: self.cancel.clone(),
             session: sid,
             message: aid,
-            host: self.settings.ollama_host(),
+            host: if self.settings.api_provider == "openai" {
+                self.settings.api_base.clone()
+            } else {
+                self.settings.ollama_host()
+            },
+            api_key: self.settings.api_key.clone(),
+            provider: self.settings.api_provider.clone(),
             searx: self.settings.searx_host(),
             use_search: self.settings.web_search && !text.is_empty(),
             query: text,
@@ -589,11 +596,22 @@ impl App {
 
     pub fn refresh_models(&mut self, ctx: &egui::Context) {
         self.models_status = "Checking…".into();
-        let host = self.settings.ollama_host();
+        let provider = self.settings.api_provider.clone();
+        let host = if provider == "openai" {
+            self.settings.api_base.clone()
+        } else {
+            self.settings.ollama_host()
+        };
+        let key = self.settings.api_key.clone();
         let tx = self.tx.clone();
         let ctx = ctx.clone();
         thread::spawn(move || {
-            let _ = tx.send(Event::Models(net::fetch_models(&host)));
+            let result = if provider == "openai" {
+                net::fetch_models_openai(&host, &key)
+            } else {
+                net::fetch_models(&host)
+            };
+            let _ = tx.send(Event::Models(result));
             ctx.request_repaint();
         });
     }

@@ -28,9 +28,10 @@ const CHIPS: [(&str, &str); 4] = [
     ("Explain a concept", "Explain like I'm five: "),
 ];
 
-const TABS: [(SettingsTab, &str); 7] = [
+const TABS: [(SettingsTab, &str); 8] = [
     (SettingsTab::General, "General"),
     (SettingsTab::Models, "Models"),
+    (SettingsTab::Api, "API"),
     (SettingsTab::Ollama, "Ollama"),
     (SettingsTab::Search, "Search"),
     (SettingsTab::Instructions, "Instructions"),
@@ -2105,6 +2106,63 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                         });
                     });
                     ui.add_space(8.0);
+                }
+            });
+        }
+
+        SettingsTab::Api => {
+            heading(ui, "API PROVIDER");
+            ui.label(
+                RichText::new("Use Ollama locally, or an OpenAI-compatible external API.")
+                    .size(11.0)
+                    .color(TEXT_SEC),
+            );
+            ui.add_space(6.0);
+            card(ui, |ui| {
+                row(ui, "Provider", |ui| {
+                    egui::ComboBox::from_id_salt("api_provider")
+                        .selected_text(if app.settings.api_provider == "openai" {
+                            "OpenAI-compatible"
+                        } else {
+                            "Ollama"
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut app.settings.api_provider, "ollama".into(), "Ollama");
+                            ui.selectable_value(
+                                &mut app.settings.api_provider,
+                                "openai".into(),
+                                "OpenAI-compatible",
+                            );
+                        });
+                });
+                ui.add_space(8.0);
+                ui.label(RichText::new("Base URL").color(TEXT));
+                ui.add(
+                    TextEdit::singleline(&mut app.settings.api_base)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("https://api.openai.com/v1"),
+                );
+                ui.add_space(8.0);
+                ui.label(RichText::new("API key").color(TEXT));
+                ui.add(
+                    TextEdit::singleline(&mut app.settings.api_key)
+                        .password(true)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("sk-..."),
+                );
+            });
+            ui.horizontal(|ui| {
+                if ui.button("Test & Refresh Models").clicked() {
+                    let ctx = ui.ctx().clone();
+                    app.refresh_models(&ctx);
+                }
+                if !app.models_status.is_empty() {
+                    let ok = app.models_status.starts_with("Connected");
+                    ui.label(RichText::new(&app.models_status).size(12.0).color(if ok {
+                        GREEN
+                    } else {
+                        TEXT_SEC
+                    }));
                 }
             });
         }

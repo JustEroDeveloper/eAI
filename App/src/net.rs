@@ -32,6 +32,27 @@ pub fn fetch_models(host: &str) -> Result<Vec<String>, String> {
         .unwrap_or_default())
 }
 
+pub fn fetch_models_openai(base: &str, key: &str) -> Result<Vec<String>, String> {
+    let base = base.trim_end_matches('/');
+    let mut req = client(10)?.get(format!("{base}/models"));
+    if !key.trim().is_empty() {
+        req = req.bearer_auth(key.trim());
+    }
+    let resp = req.send().map_err(|e| format!("Not reachable: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("API returned HTTP {}", resp.status().as_u16()));
+    }
+    let v: Value = resp.json().map_err(|e| e.to_string())?;
+    Ok(v["data"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| m["id"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// True when Ollama reports the "vision" capability for the model.
 pub fn model_supports_vision(host: &str, model: &str) -> bool {
     let Ok(c) = client(5) else { return false };

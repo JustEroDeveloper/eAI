@@ -17,6 +17,8 @@ pub struct Job {
     pub session: Uuid,
     pub message: Uuid,
     pub host: String,
+    pub api_key: String,
+    pub provider: String,
     pub searx: String,
     pub use_search: bool,
     pub query: String,
@@ -130,18 +132,29 @@ fn turn(job: &Job) -> Result<(), String> {
         let mut entry = json!({ "role": m.role, "content": content });
         if is_last {
             if let Some(img) = &m.image {
-                entry["images"] = json!([base64::engine::general_purpose::STANDARD.encode(img)]);
+                if job.provider == "openai" {
+                    entry["content"] = json!([
+                        { "type": "text", "text": content },
+                        { "type": "image_url", "image_url": { "url": format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(img)) } }
+                    ]);
+                } else {
+                    entry["images"] = json!([base64::engine::general_purpose::STANDARD.encode(img)]);
+                }
             }
         }
         messages.push(entry);
     }
 
-    stream(job, &messages)?;
+    if job.provider == "openai" {
+        stream_openai(job, &messages)?;
+    } else {
+        stream_ollama(job, &messages)?;
+    }
     Ok(())
 }
 
 /// One streamed call to Ollama. Each delta goes to the UI as it arrives.
-fn stream(job: &Job, messages: &[Value]) -> Result<(), String> {
+fn stream_ollama(job: &Job, messages: &[Value]) -> Result<(), String> {
     let mut body = json!({
         "model": job.model,
         "messages": messages,
@@ -211,6 +224,89 @@ fn stream(job: &Job, messages: &[Value]) -> Result<(), String> {
     Ok(())
 }
 
+/// One streamed call to an OpenAI-compatible API.
+fn stream_openai(job: &Job, messages: &[Value]) -> Result<(), String> {
+    let base = job.host.trim_end_matches('/');
+    let body = json!({
+        "model": job.model,
+        "messages": messages,
+        "stream": true,
+        "max_tokens": job.max_tokens,
+        "temperature": 0.6,
+        "top_p": 0.95
+    });
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(900))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.post(format!("{base}/chat/completions")).json(&body);
+    if !job.api_key.trim().is_empty() {
+        req = req.bearer_auth(job.api_key.trim());
+    }
+    let resp = req
+        .send()
+        .map_err(|e| format!("Could not reach API at {}: {e}", job.host))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status().as_u16();
+        let text = resp.text().unwrap_or_default();
+        let detail = serde_json::from_str::<Value>(&text)
+            .ok()
+            .and_then(|v| {
+                v["error"]["message"]
+                    .as_str()
+                    .or_else(|| v["error"].as_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| "no details returned".into());
+        return Err(format!(
+            "API error (HTTP {status}): {detail}. Check that the model '{}' is available.",
+            job.model
+        ));
+    }
+
+    for line in BufReader::new(resp).lines() {
+        if job.cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        let line = line.map_err(|e| e.to_string())?;
+        let line = line.trim();
+        let Some(data) = line.strip_prefix("data:") else {
+            continue;
+        };
+        let data = data.trim();
+        if data.is_empty() {
+            continue;
+        }
+        if data == "[DONE]" {
+            break;
+        }
+        let Ok(v) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        let delta = &v["choices"][0]["delta"];
+        let c = delta["content"].as_str().unwrap_or("").to_string();
+        let t = delta["reasoning_content"]
+            .as_str()
+            .or_else(|| delta["reasoning"].as_str())
+            .unwrap_or("")
+            .to_string();
+        if !c.is_empty() || !t.is_empty() {
+            emit(
+                job,
+                Event::Chunk {
+                    session: job.session,
+                    message: job.message,
+                    content: c,
+                    thinking: t,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
 /// A short title from the first exchange. Falls back to the opening words.
 fn make_title(job: &Job) -> Option<String> {
     let user = job
@@ -220,38 +316,68 @@ fn make_title(job: &Job) -> Option<String> {
         .content
         .clone();
     let prompt: String = user.chars().take(300).collect();
-    let mut body = json!({
-        "model": job.model,
-        "messages": [
-            {
-                "role": "system",
-                "content": "You write short chat titles. Reply with ONLY the title: 2 to 5 words, Title Case, no quotes, no punctuation, no explanation."
-            },
-            {
-                "role": "user",
-                "content": format!("/no_think\nTitle this conversation.\nUser message:\n{prompt}")
-            }
-        ],
-        "stream": false,
-        "keep_alive": "30m",
-        "options": { "temperature": 0.2, "num_predict": 32 }
-    });
-    if supports_thinking(&job.model) {
-        body["think"] = json!(false);
-    }
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
         .ok()?;
-    let v: Value = client
-        .post(format!("{}/api/chat", job.host))
-        .json(&body)
-        .send()
-        .ok()?
-        .json()
-        .ok()?;
-    let raw = v["message"]["content"].as_str().unwrap_or("");
-    Some(clean_title(raw).unwrap_or_else(|| fallback_title(&user)))
+
+    let raw = if job.provider == "openai" {
+        let base = job.host.trim_end_matches('/');
+        let body = json!({
+            "model": job.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You write short chat titles. Reply with ONLY the title: 2 to 5 words, Title Case, no quotes, no punctuation, no explanation."
+                },
+                {
+                    "role": "user",
+                    "content": format!("Title this conversation.\nUser message:\n{prompt}")
+                }
+            ],
+            "stream": false,
+            "max_tokens": 32,
+            "temperature": 0.2
+        });
+        let mut req = client.post(format!("{base}/chat/completions")).json(&body);
+        if !job.api_key.trim().is_empty() {
+            req = req.bearer_auth(job.api_key.trim());
+        }
+        let v: Value = req.send().ok()?.json().ok()?;
+        v["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string()
+    } else {
+        let mut body = json!({
+            "model": job.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You write short chat titles. Reply with ONLY the title: 2 to 5 words, Title Case, no quotes, no punctuation, no explanation."
+                },
+                {
+                    "role": "user",
+                    "content": format!("/no_think\nTitle this conversation.\nUser message:\n{prompt}")
+                }
+            ],
+            "stream": false,
+            "keep_alive": "30m",
+            "options": { "temperature": 0.2, "num_predict": 32 }
+        });
+        if supports_thinking(&job.model) {
+            body["think"] = json!(false);
+        }
+        let v: Value = client
+            .post(format!("{}/api/chat", job.host))
+            .json(&body)
+            .send()
+            .ok()?
+            .json()
+            .ok()?;
+        v["message"]["content"].as_str().unwrap_or("").to_string()
+    };
+    Some(clean_title(&raw).unwrap_or_else(|| fallback_title(&user)))
 }
 
 fn clean_title(raw: &str) -> Option<String> {
