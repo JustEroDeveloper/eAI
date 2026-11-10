@@ -8,6 +8,8 @@ All notable changes to **eAI Lite** are documented here.
 - Attach `.txt` and code files through the `+` icon in the message bar.
 - Removable "file attached" chips in the composer and message bubbles.
 - Censorless mode toggle in **Settings → General**.
+- External API provider support in **Settings → API** (Ollama or OpenAI-compatible).
+- macOS app bundle (`.dmg` / `.zip`) alongside Windows `.exe`.
 - Broader Unicode font fallbacks to reduce empty-box/tofu glyphs.
 
 ### Improved
