@@ -4,12 +4,12 @@ use eframe::egui::{
 };
 use std::f32::consts::TAU;
 
-pub const ACCENT: Color32 = Color32::from_rgb(10, 132, 255);
-pub const WINDOW_BG: Color32 = Color32::from_rgb(30, 30, 30);
-pub const SIDEBAR_BG: Color32 = Color32::from_rgb(38, 38, 40);
-pub const CARD: Color32 = Color32::from_rgb(44, 44, 46);
-pub const CARD_HI: Color32 = Color32::from_rgb(58, 58, 61);
-pub const INPUT_BG: Color32 = Color32::from_rgb(44, 44, 46);
+pub const ACCENT: Color32 = Color32::from_rgb(79, 140, 255);
+pub const WINDOW_BG: Color32 = Color32::from_rgb(16, 16, 18);
+pub const SIDEBAR_BG: Color32 = Color32::from_rgb(22, 22, 26);
+pub const CARD: Color32 = Color32::from_rgb(28, 28, 32);
+pub const CARD_HI: Color32 = Color32::from_rgb(40, 40, 46);
+pub const INPUT_BG: Color32 = Color32::from_rgb(28, 28, 32);
 pub const TEXT: Color32 = Color32::from_rgb(245, 245, 247);
 pub const TEXT_SEC: Color32 = Color32::from_rgb(152, 152, 157);
 pub const TEXT_TER: Color32 = Color32::from_rgb(99, 99, 102);

@@ -118,6 +118,12 @@ fn turn(job: &Job) -> Result<(), String> {
     for (i, m) in job.history.iter().enumerate().skip(n.saturating_sub(9)) {
         let is_last = i == n - 1;
         let mut content = m.content.clone();
+        if let Some(att) = &m.attachment {
+            content = format!(
+                "{content}\n\nAttached file `{}`:\n```\n{}\n```",
+                att.name, att.content
+            );
+        }
         if is_last && !context.is_empty() {
             content = format!("{context}\nQuestion: {content}");
         }

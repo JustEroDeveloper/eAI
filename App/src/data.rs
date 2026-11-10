@@ -17,6 +17,7 @@ pub struct Settings {
     pub max_tokens: u32,
     pub instructions: String,
     pub web_search: bool,
+    pub censorless: bool,
     pub ollama_slots: Vec<String>,
     pub ollama_active: usize,
     pub searx_slots: Vec<String>,
@@ -33,6 +34,7 @@ impl Default for Settings {
             max_tokens: 4096,
             instructions: String::new(),
             web_search: true,
+            censorless: false,
             ollama_slots: vec![DEFAULT_OLLAMA.into()],
             ollama_active: 0,
             searx_slots: vec![DEFAULT_SEARX.into()],
@@ -76,6 +78,13 @@ pub struct Source {
     pub snippet: String,
 }
 
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct Attachment {
+    pub name: String,
+    pub content: String,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Message {
@@ -89,6 +98,9 @@ pub struct Message {
     /// Attached image bytes (JPEG). Not saved to disk to keep conversations small.
     #[serde(skip)]
     pub image: Option<Vec<u8>>,
+    /// Attached text/code file. Saved with the conversation.
+    #[serde(default)]
+    pub attachment: Option<Attachment>,
 }
 
 impl Default for Message {
@@ -102,6 +114,7 @@ impl Default for Message {
             model: String::new(),
             sources: Vec::new(),
             image: None,
+            attachment: None,
         }
     }
 }

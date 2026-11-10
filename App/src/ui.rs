@@ -39,8 +39,8 @@ const TABS: [(SettingsTab, &str); 7] = [
 ];
 
 const CHAT_WIDTH: f32 = 720.0;
-const REPLY_BG: Color32 = Color32::from_rgb(33, 33, 35);
-const PILL_BG: Color32 = Color32::from_rgb(46, 46, 50);
+const REPLY_BG: Color32 = Color32::from_rgb(26, 26, 30);
+const PILL_BG: Color32 = Color32::from_rgb(34, 34, 40);
 
 // ---------- Setup ----------
 
@@ -68,6 +68,27 @@ pub fn setup_fonts(ctx: &egui::Context) {
             .insert("ui-regular".into(), FontData::from_owned(bytes));
         reg_list.insert(0, "ui-regular".into());
     }
+
+    // Extra fallback fonts with broader Unicode coverage, so model output that
+    // contains symbols or emoji does not render as empty boxes.
+    let fallback_candidates = [
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+        "/System/Library/Fonts/Apple Symbols.ttf",
+        "/System/Library/Fonts/Menlo.ttc",
+        "/System/Library/Fonts/Monaco.ttf",
+        "C:\\\\Windows\\\\Fonts\\\\arialuni.ttf",
+        "C:\\\\Windows\\\\Fonts\\\\seguiemj.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
+    ];
+    for (idx, path) in fallback_candidates.iter().enumerate() {
+        if let Ok(bytes) = std::fs::read(path) {
+            let name = format!("fallback-{idx}");
+            fonts.font_data.insert(name.clone(), FontData::from_owned(bytes));
+            reg_list.push(name);
+        }
+    }
+
     let mut bold_list = reg_list.clone();
     if let Some(bytes) = bold_files.iter().find_map(|p| std::fs::read(p).ok()) {
         fonts
@@ -245,8 +266,8 @@ fn heading(ui: &mut Ui, text: &str) {
 fn card(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
     Frame::none()
         .fill(CARD)
-        .rounding(Rounding::same(10.0))
-        .inner_margin(Margin::symmetric(14.0, 10.0))
+        .rounding(Rounding::same(14.0))
+        .inner_margin(Margin::symmetric(18.0, 12.0))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             f(ui);
@@ -809,8 +830,8 @@ fn sidebar(app: &mut App, ui: &mut Ui) {
         let search_width = (ui.available_width() - button_size.x - 12.0).max(80.0);
         Frame::none()
             .fill(INPUT_BG)
-            .rounding(Rounding::same(4.0))
-            .inner_margin(Margin::symmetric(8.0, 3.0))
+            .rounding(Rounding::same(8.0))
+            .inner_margin(Margin::symmetric(10.0, 5.0))
             .show(ui, |ui| {
                 ui.set_width(search_width - 16.0);
                 ui.horizontal(|ui| {
@@ -1426,13 +1447,21 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
         ui.with_layout(Layout::top_down(Align::Max), |ui| {
             Frame::none()
                 .fill(ACCENT)
-                .rounding(Rounding::same(18.0))
+                .rounding(Rounding::same(20.0))
                 .inner_margin(Margin::symmetric(16.0, 10.0))
                 .show(ui, |ui| {
                     ui.set_max_width(CHAT_WIDTH * 0.8);
                     if m.image.is_some() {
                         ui.label(
                             RichText::new("Image attached")
+                                .size(11.0)
+                                .color(Color32::from_white_alpha(200)),
+                        );
+                    }
+                    if m.attachment.is_some() {
+                        let name = m.attachment.as_ref().unwrap().name.clone();
+                        ui.label(
+                            RichText::new(format!("File attached: {name}"))
                                 .size(11.0)
                                 .color(Color32::from_white_alpha(200)),
                         );
@@ -1469,7 +1498,7 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
         } else {
             "Thought process"
         };
-        let arrow = if open { "⌄" } else { "›" };
+        let arrow = if open { "v" } else { ">" };
 
         // Clickable header. Uses only plain text and a sparkle shape, no special glyphs.
         let pill = ui.add(
@@ -1521,8 +1550,8 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
 
     Frame::none()
         .fill(REPLY_BG)
-        .stroke(st(1.0, Color32::from_white_alpha(18)))
-        .rounding(Rounding::same(14.0))
+        .stroke(st(1.0, Color32::from_white_alpha(24)))
+        .rounding(Rounding::same(18.0))
         .inner_margin(Margin::symmetric(18.0, 14.0))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -1657,6 +1686,7 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
     let focused = ui.ctx().memory(|m| m.has_focus(focus_id));
     let shift = ui.input(|i| i.modifiers.shift);
     let has_image = app.attached_image.is_some();
+    let has_file = app.attached_file.is_some();
     let models = app.model_list();
     let mut send = false;
     let mut stop = false;
@@ -1690,12 +1720,12 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
         Frame::none()
             .fill(INPUT_BG)
             .stroke(st(1.4, border))
-            .rounding(Rounding::same(8.0))
+            .rounding(Rounding::same(14.0))
             .inner_margin(Margin {
-                left: 10.0,
-                right: 10.0,
-                top: 8.0,
-                bottom: 7.0,
+                left: 12.0,
+                right: 12.0,
+                top: 10.0,
+                bottom: 9.0,
             })
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -1705,6 +1735,15 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                         ui.label(RichText::new("Image attached").size(11.0).color(TEXT_SEC));
                         if ui.small_button("Remove").clicked() {
                             app.attached_image = None;
+                        }
+                    });
+                }
+                if app.attached_file.is_some() {
+                    let name = app.attached_file.as_ref().unwrap().name.clone();
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(format!("File attached: {name}")).size(11.0).color(TEXT_SEC));
+                        if ui.small_button("Remove").clicked() {
+                            app.attached_file = None;
                         }
                     });
                 }
@@ -1732,8 +1771,8 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
 
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    if icon_button(ui, icon_plus, "Add image") {
-                        app.pick_image();
+                    if icon_button(ui, icon_plus, "Add image or file") {
+                        app.pick_attachment();
                     }
                     let search_label = if app.settings.web_search {
                         "Web search on"
@@ -1759,7 +1798,7 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                         let (rect, resp) =
                             ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
                         let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
-                        let enabled = !app.prompt.trim().is_empty() || has_image;
+                        let enabled = !app.prompt.trim().is_empty() || has_image || has_file;
                         let hover = ui.ctx().animate_bool(resp.id, resp.hovered() && enabled);
                         let radius = 15.0 * (1.0 + 0.08 * hover);
                         let p = ui.painter();
@@ -1992,6 +2031,15 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                 row(ui, "Thinking (Qwen3, DeepSeek-R1)", |ui| {
                     switch(ui, &mut app.settings.thinking)
                 });
+                ui.add_space(8.0);
+                row(ui, "Censorless mode", |ui| {
+                    switch(ui, &mut app.settings.censorless)
+                });
+                ui.label(
+                    RichText::new("Instructs the model not to refuse or filter replies.")
+                        .size(10.5)
+                        .color(TEXT_SEC),
+                );
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Maximum reply length").color(TEXT));
