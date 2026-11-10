@@ -1,0 +1,22 @@
+[package]
+name = "eai-lite"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.29"
+egui = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+chrono = "0.4"
+uuid = { version = "1", features = ["v4", "serde"] }
+dirs = "5"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "ico"] }
+rfd = "0.14"
+base64 = "0.22"
+regex = "1"
+open = "5"
+
+[build-dependencies]
+winres = "0.1"
