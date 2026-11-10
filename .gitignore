@@ -1,0 +1,11 @@
+# Rust build output
+/App/target/
+/App/target-*/
+
+# macOS archive metadata
+__MACOSX/
+._*
+.DS_Store
+
+# Built macOS application bundle
+/App/*.app/
