@@ -705,16 +705,6 @@ pub fn render(app: &mut App, ctx: &egui::Context) {
                 .show(ctx, |ui| sidebar_rail(app, ui));
         }
 
-        egui::TopBottomPanel::bottom("input")
-            .show_separator_line(false)
-            .frame(Frame::none().fill(WINDOW_BG).inner_margin(Margin {
-                left: input_gutter,
-                right: input_gutter,
-                top: 6.0,
-                bottom: 16.0,
-            }))
-            .show(ctx, |ui| input_bar(app, ui));
-
         egui::CentralPanel::default()
             .frame(Frame::none().fill(WINDOW_BG))
             .show(ctx, |ui| {
@@ -723,6 +713,25 @@ pub fn render(app: &mut App, ctx: &egui::Context) {
                 } else {
                     welcome(app, ui);
                 }
+            });
+
+        let sidebar_width = if app.show_sidebar { 260.0 } else { 64.0 };
+        let main_width = (viewport_width - sidebar_width).max(0.0);
+        egui::Area::new(Id::new("input_overlay"))
+            .order(egui::Order::Foreground)
+            .anchor(Align2::CENTER_BOTTOM, Vec2::new(sidebar_width * 0.5, -8.0))
+            .show(ctx, |ui| {
+                ui.set_min_width(main_width);
+                ui.set_max_width(main_width);
+                Frame::none()
+                    .fill(Color32::TRANSPARENT)
+                    .inner_margin(Margin {
+                        left: input_gutter,
+                        right: input_gutter,
+                        top: 6.0,
+                        bottom: 16.0,
+                    })
+                    .show(ui, |ui| input_bar(app, ui));
             });
 
         thinking_window(app, ctx);
@@ -1397,7 +1406,7 @@ fn chat_view(app: &mut App, ui: &mut Ui) {
                         });
                         ui.add_space(22.0);
                     }
-                    ui.add_space(40.0);
+                    ui.add_space(160.0);
                 });
             });
         });
