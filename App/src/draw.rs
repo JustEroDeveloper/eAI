@@ -55,19 +55,6 @@ pub fn grad_static(t: f32) -> Color32 {
     }
 }
 
-pub fn aurora_at(p: f32) -> Color32 {
-    let rgb = [
-        STOPS[0], STOPS[0], STOPS[1], STOPS[2], STOPS[2], STOPS[0], STOPS[1], STOPS[2], STOPS[2],
-    ];
-    let alpha = [0.0f32, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 0.0];
-    let x = p.clamp(0.0, 1.0) * 8.0;
-    let i = (x.floor() as usize).min(7);
-    let f = x - i as f32;
-    let c = mix(rgb[i], rgb[i + 1], f);
-    let a = alpha[i] + (alpha[i + 1] - alpha[i]) * f;
-    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), (a * 255.0) as u8)
-}
-
 /// Text where each letter drifts through the gradient.
 pub fn gradient_job(text: &str, size: f32, time: f32) -> LayoutJob {
     let mut job = LayoutJob::default();
@@ -306,6 +293,23 @@ pub fn icon_gear(p: &Painter, c: Pos2, col: Color32) {
             st(1.6, col),
         );
     }
+}
+
+pub fn icon_robot(p: &Painter, c: Pos2, col: Color32) {
+    let antenna_top = Pos2::new(c.x, c.y - 8.0);
+    p.line_segment([Pos2::new(c.x, c.y - 5.5), antenna_top], st(1.4, col));
+    p.circle_filled(antenna_top, 1.4, col);
+    let head = Rect::from_center_size(Pos2::new(c.x, c.y + 0.5), Vec2::new(14.0, 11.0));
+    p.rect_stroke(head, Rounding::same(3.0), st(1.5, col));
+    p.circle_filled(Pos2::new(c.x - 3.2, c.y), 1.1, col);
+    p.circle_filled(Pos2::new(c.x + 3.2, c.y), 1.1, col);
+    p.line_segment(
+        [
+            Pos2::new(c.x - 2.5, c.y + 4.0),
+            Pos2::new(c.x + 2.5, c.y + 4.0),
+        ],
+        st(1.3, col),
+    );
 }
 
 pub fn icon_check(p: &Painter, c: Pos2, col: Color32) {

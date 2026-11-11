@@ -19,5 +19,13 @@ regex = "1"
 open = "5"
 sha2 = "0.10"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [build-dependencies]
 winres = "0.1"

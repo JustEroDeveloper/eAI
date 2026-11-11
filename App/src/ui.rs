@@ -28,8 +28,9 @@ const CHIPS: [(&str, &str); 4] = [
     ("Explain a concept", "Explain like I'm five: "),
 ];
 
-const TABS: [(SettingsTab, &str); 8] = [
+const TABS: [(SettingsTab, &str); 9] = [
     (SettingsTab::General, "General"),
+    (SettingsTab::Agents, "Agents"),
     (SettingsTab::Models, "Models"),
     (SettingsTab::Api, "API"),
     (SettingsTab::Ollama, "Ollama"),
@@ -85,7 +86,9 @@ pub fn setup_fonts(ctx: &egui::Context) {
     for (idx, path) in fallback_candidates.iter().enumerate() {
         if let Ok(bytes) = std::fs::read(path) {
             let name = format!("fallback-{idx}");
-            fonts.font_data.insert(name.clone(), FontData::from_owned(bytes));
+            fonts
+                .font_data
+                .insert(name.clone(), FontData::from_owned(bytes));
             reg_list.push(name);
         }
     }
@@ -276,6 +279,14 @@ fn card(ui: &mut Ui, f: impl FnOnce(&mut Ui)) {
     ui.add_space(10.0);
 }
 
+fn settings_button(ui: &mut Ui, label: &str) -> egui::Response {
+    ui.add(
+        egui::Button::new(label)
+            .fill(Color32::from_rgb(43, 44, 49))
+            .stroke(st(1.0, Color32::from_rgb(65, 66, 73))),
+    )
+}
+
 fn row(ui: &mut Ui, label: &str, f: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(label).color(TEXT));
@@ -292,7 +303,7 @@ fn slot_editor(ui: &mut Ui, slots: &mut Vec<String>, active: &mut usize, new_val
                 *active = i;
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if slots.len() > 1 && ui.small_button("Remove").clicked() {
+                if slots.len() > 1 && settings_button(ui, "Remove").clicked() {
                     remove = Some(i);
                 }
             });
@@ -310,7 +321,7 @@ fn slot_editor(ui: &mut Ui, slots: &mut Vec<String>, active: &mut usize, new_val
                 .hint_text("http://host:port")
                 .desired_width(260.0),
         );
-        if ui.button("Add").clicked() && !new_value.trim().is_empty() {
+        if settings_button(ui, "Add").clicked() && !new_value.trim().is_empty() {
             slots.push(new_value.trim().to_string());
             new_value.clear();
         }
@@ -320,7 +331,8 @@ fn slot_editor(ui: &mut Ui, slots: &mut Vec<String>, active: &mut usize, new_val
 // ---------- Profiles ----------
 
 fn primary_button(ui: &mut Ui, label: &str) -> bool {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), Sense::click());
+    let (rect, resp) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 40.0), Sense::click());
     let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
     let hover = ui.ctx().animate_bool(resp.id, resp.hovered());
     ui.painter().rect_filled(
@@ -436,8 +448,7 @@ fn auth_screen(app: &mut App, ctx: &egui::Context) {
                         ui.add_space(56.0);
 
                         let pulse = (t * 2.0).sin() * 0.5 + 0.5;
-                        let (r, _) =
-                            ui.allocate_exact_size(Vec2::new(64.0, 56.0), Sense::hover());
+                        let (r, _) = ui.allocate_exact_size(Vec2::new(64.0, 56.0), Sense::hover());
                         sparkles(
                             ui.painter(),
                             r.center(),
@@ -451,14 +462,17 @@ fn auth_screen(app: &mut App, ctx: &egui::Context) {
                         ui.add_space(6.0);
                         let subtitle = if app.auth_register {
                             "Create a local profile to get started."
+                        } else if app.accounts.len() == 1 && app.accounts[0].has_password() {
+                            "Enter your password to continue."
+                        } else if app.accounts.len() == 1 {
+                            "Continue to your profile."
                         } else {
                             "Choose your profile to continue."
                         };
                         ui.label(RichText::new(subtitle).size(13.0).color(TEXT_SEC));
                         ui.add_space(24.0);
 
-                        let card_w =
-                            400.0_f32.min((ui.available_width() - 32.0).max(280.0));
+                        let card_w = 400.0_f32.min((ui.available_width() - 32.0).max(280.0));
                         Frame::none()
                             .fill(CARD)
                             .stroke(st(1.0, Color32::from_white_alpha(18)))
@@ -467,12 +481,7 @@ fn auth_screen(app: &mut App, ctx: &egui::Context) {
                             .show(ui, |ui| {
                                 ui.set_width(card_w - 48.0);
                                 if app.auth_register {
-                                    auth_register_form(
-                                        app,
-                                        ui,
-                                        &mut do_register,
-                                        &mut go_login,
-                                    );
+                                    auth_register_form(app, ui, &mut do_register, &mut go_login);
                                 } else {
                                     auth_login_form(app, ui, &mut do_login, &mut go_register);
                                 }
@@ -599,28 +608,34 @@ fn auth_login_form(app: &mut App, ui: &mut Ui, submit: &mut Option<Uuid>, go_reg
     let accounts = app.accounts.clone();
 
     auth_error(ui, &app.auth_error);
-    field_label(ui, "PROFILES");
-
-    for account in &accounts {
-        let selected = app.auth_selected == Some(account.id);
-        if account_row(ui, account, selected).clicked() {
-            if account.has_password() {
-                app.auth_selected = Some(account.id);
-                app.auth_password.clear();
-                app.auth_error.clear();
-            } else {
-                *submit = Some(account.id);
+    if accounts.len() > 1 {
+        field_label(ui, "PROFILES");
+        for account in &accounts {
+            let selected = app.auth_selected == Some(account.id);
+            if account_row(ui, account, selected).clicked() {
+                if account.has_password() {
+                    app.auth_selected = Some(account.id);
+                    app.auth_password.clear();
+                    app.auth_error.clear();
+                } else {
+                    *submit = Some(account.id);
+                }
             }
         }
     }
 
-    let selected = app
-        .auth_selected
-        .and_then(|id| accounts.iter().find(|a| a.id == id));
+    let selected = if accounts.len() == 1 {
+        accounts.first()
+    } else {
+        app.auth_selected
+            .and_then(|id| accounts.iter().find(|a| a.id == id))
+    };
     if let Some(account) = selected {
         if account.has_password() {
-            ui.add_space(10.0);
-            field_label(ui, "PASSWORD");
+            if accounts.len() > 1 {
+                ui.add_space(10.0);
+                field_label(ui, "PASSWORD");
+            }
             let password = ui.add(
                 TextEdit::singleline(&mut app.auth_password)
                     .hint_text("Enter your password")
@@ -639,6 +654,8 @@ fn auth_login_form(app: &mut App, ui: &mut Ui, submit: &mut Option<Uuid>, go_reg
             if enter {
                 *submit = Some(account.id);
             }
+        } else if accounts.len() == 1 && primary_button(ui, "Continue") {
+            *submit = Some(account.id);
         }
     }
 
@@ -665,6 +682,14 @@ pub fn render(app: &mut App, ctx: &egui::Context) {
     if app.panel == Panel::Settings {
         settings_page(app, ctx);
     } else {
+        let viewport_width = ctx.input(|i| {
+            i.viewport()
+                .inner_rect
+                .unwrap_or_else(|| i.screen_rect())
+                .width()
+        });
+        let input_gutter = if viewport_width < 1200.0 { 36.0 } else { 24.0 };
+
         if app.show_sidebar {
             egui::SidePanel::left("sidebar")
                 .resizable(false)
@@ -680,16 +705,11 @@ pub fn render(app: &mut App, ctx: &egui::Context) {
                 .show(ctx, |ui| sidebar_rail(app, ui));
         }
 
-        egui::TopBottomPanel::top("toolbar")
-            .exact_height(52.0)
-            .frame(Frame::none().fill(WINDOW_BG))
-            .show(ctx, |ui| toolbar(app, ui));
-
         egui::TopBottomPanel::bottom("input")
             .show_separator_line(false)
             .frame(Frame::none().fill(WINDOW_BG).inner_margin(Margin {
-                left: 24.0,
-                right: 24.0,
+                left: input_gutter,
+                right: input_gutter,
                 top: 6.0,
                 bottom: 16.0,
             }))
@@ -718,71 +738,6 @@ fn shortcuts(app: &mut App, ctx: &egui::Context) {
     }
     if ctx.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::B)) {
         app.show_sidebar = !app.show_sidebar;
-    }
-}
-
-/// Top bar: sparkle, gradient "eAI Lite", the current chat title, and a compose button.
-fn toolbar(app: &mut App, ui: &mut Ui) {
-    let busy = app.generating.is_some();
-    let rect = ui.max_rect();
-    let t = ui.input(|i| i.time) as f32;
-    ui.horizontal_centered(|ui| {
-        ui.add_space(16.0);
-        let (r, _) = ui.allocate_exact_size(Vec2::splat(18.0), Sense::hover());
-        sparkles(
-            ui.painter(),
-            r.center(),
-            5.6,
-            1.0,
-            None,
-            (t * 1.6).sin() * 0.5 + 0.5,
-        );
-        gradient_title(ui, APP_NAME, 15.0, t);
-
-        if let Some(s) = app.active_session() {
-            ui.label(
-                RichText::new(format!("·  {}", truncate(&s.title, 40)))
-                    .size(12.0)
-                    .color(TEXT_SEC),
-            );
-        }
-    });
-    if busy {
-        aurora(
-            ui,
-            Rect::from_min_max(
-                Pos2::new(rect.left(), rect.bottom() - 2.0),
-                rect.right_bottom(),
-            ),
-        );
-    }
-    ui.painter().hline(
-        rect.x_range(),
-        rect.bottom(),
-        Stroke::new(1.0_f32, Color32::from_white_alpha(12)),
-    );
-}
-
-fn aurora(ui: &mut Ui, rect: Rect) {
-    let t = ui.input(|i| i.time) as f32;
-    let progress = (t % 3.0) / 3.0;
-    let w = rect.width().max(1.0);
-    let step = 3.0;
-    let n = (w / step).ceil() as i32;
-    let p = ui.painter();
-    for i in 0..n {
-        let x = rect.left() + i as f32 * step;
-        let xn = (i as f32 * step) / w;
-        let fade = (xn * 3.0).min((1.0 - xn) * 3.0).clamp(0.0, 1.0);
-        let c = aurora_at(xn * 0.5 + progress * 0.5);
-        p.rect_filled(
-            Rect::from_min_size(
-                Pos2::new(x, rect.top()),
-                Vec2::new(step + 0.5, rect.height()),
-            ),
-            0.0,
-            c.gamma_multiply(fade),
-        );
     }
 }
 
@@ -816,7 +771,11 @@ fn sidebar(app: &mut App, ui: &mut Ui) {
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.add_space(6.0);
-            if icon_button(ui, icon_sidebar, &format!("Hide sidebar ({})", shortcut("B"))) {
+            if icon_button(
+                ui,
+                icon_sidebar,
+                &format!("Hide sidebar ({})", shortcut("B")),
+            ) {
                 app.show_sidebar = false;
             }
         });
@@ -1417,7 +1376,8 @@ fn chat_view(app: &mut App, ui: &mut Ui) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             let avail = ui.available_width();
-            let col = avail.min(CHAT_WIDTH);
+            let side_inset = 24.0_f32.min(avail * 0.08);
+            let col = (avail - side_inset * 2.0).min(CHAT_WIDTH).max(0.0);
             let pad = ((avail - col) / 2.0).max(0.0);
             ui.horizontal_top(|ui| {
                 ui.add_space(pad);
@@ -1477,7 +1437,7 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
         let (r, _) = ui.allocate_exact_size(Vec2::splat(20.0), Sense::hover());
         sparkles(ui.painter(), r.center(), 6.0, 1.0, None, 0.0);
         let t = ui.input(|i| i.time) as f32;
-        gradient_title(ui, APP_NAME, 13.0, t);
+        gradient_title(ui, m.group_speaker.as_deref().unwrap_or(APP_NAME), 13.0, t);
         if !m.model.is_empty() {
             ui.label(
                 RichText::new(app.settings.display_name(&m.model))
@@ -1486,6 +1446,12 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
             );
         }
     });
+    if streaming && !m.progress.is_empty() {
+        ui.label(RichText::new(&m.progress).size(11.0).color(TEXT_TER));
+    }
+    for entry in &m.tool_log {
+        ui.label(RichText::new(entry).size(11.0).color(TEXT_SEC));
+    }
     ui.add_space(6.0);
 
     let (inline_think, body) = split_think(&m.content);
@@ -1551,7 +1517,6 @@ fn message(app: &mut App, ui: &mut Ui, m: &Message, streaming: bool) {
 
     Frame::none()
         .fill(REPLY_BG)
-        .stroke(st(1.0, Color32::from_white_alpha(24)))
         .rounding(Rounding::same(18.0))
         .inner_margin(Margin::symmetric(18.0, 14.0))
         .show(ui, |ui| {
@@ -1689,6 +1654,25 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
     let has_image = app.attached_image.is_some();
     let has_file = app.attached_file.is_some();
     let models = app.model_list();
+    let selected_agent_id = app.settings.active_agent;
+    let active_agent_id = if app.settings.agent_mode {
+        selected_agent_id
+    } else {
+        None
+    };
+    let effective_search = active_agent_id
+        .and_then(|id| app.settings.agents.iter().find(|a| a.id == id))
+        .map_or(app.settings.web_search, |a| a.web_search);
+    let selected_model = active_agent_id
+        .and_then(|id| app.settings.agents.iter().find(|a| a.id == id))
+        .map(|a| {
+            if a.model.is_empty() {
+                app.settings.model.clone()
+            } else {
+                a.model.clone()
+            }
+        })
+        .unwrap_or_else(|| app.settings.model.clone());
     let mut send = false;
     let mut stop = false;
 
@@ -1697,8 +1681,8 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
     }
 
     ui.vertical_centered(|ui| {
-        ui.set_max_width(CHAT_WIDTH);
-        let composer_width = ui.available_width().min(CHAT_WIDTH);
+        let composer_width = (ui.available_width() - 80.0).min(CHAT_WIDTH).max(0.0);
+        ui.set_max_width(composer_width);
         ui.allocate_ui_with_layout(
             Vec2::new(composer_width, 16.0),
             Layout::right_to_left(Align::Center),
@@ -1742,7 +1726,11 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                 if app.attached_file.is_some() {
                     let name = app.attached_file.as_ref().unwrap().name.clone();
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("File attached: {name}")).size(11.0).color(TEXT_SEC));
+                        ui.label(
+                            RichText::new(format!("File attached: {name}"))
+                                .size(11.0)
+                                .color(TEXT_SEC),
+                        );
                         if ui.small_button("Remove").clicked() {
                             app.attached_file = None;
                         }
@@ -1772,19 +1760,140 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
 
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
+                    let active_name = app
+                        .settings
+                        .active_group
+                        .and_then(|id| app.settings.groups.iter().find(|g| g.id == id))
+                        .map(|g| format!("Group: {}", g.name))
+                        .or_else(|| {
+                            app.settings
+                                .active_agent
+                                .and_then(|id| app.settings.agents.iter().find(|a| a.id == id))
+                                .map(|a| a.name.clone())
+                        })
+                        .unwrap_or_else(|| "Choose agent".into());
+                    let enabled = app.settings.agent_mode;
+                    let (robot_rect, robot_response) =
+                        ui.allocate_exact_size(Vec2::splat(26.0), Sense::click());
+                    let robot_hover = robot_response.hovered();
+                    let robot_fill = if enabled {
+                        ACCENT.gamma_multiply(0.24)
+                    } else if robot_hover {
+                        Color32::from_white_alpha(14)
+                    } else {
+                        Color32::TRANSPARENT
+                    };
+                    ui.painter()
+                        .rect_filled(robot_rect, Rounding::same(7.0), robot_fill);
+                    icon_robot(
+                        ui.painter(),
+                        robot_rect.center(),
+                        if enabled { ACCENT } else { TEXT_SEC },
+                    );
+                    if robot_response
+                        .on_hover_text(if enabled {
+                            "Agent Mode on — click to turn off"
+                        } else {
+                            "Enable Agent Mode"
+                        })
+                        .clicked()
+                    {
+                        if app.settings.agent_mode {
+                            app.settings.agent_mode = false;
+                        } else if let Some(group_id) = app.settings.active_group {
+                            let member_count = app
+                                .settings
+                                .groups
+                                .iter()
+                                .find(|g| g.id == group_id)
+                                .map(|g| {
+                                    g.agent_ids
+                                        .iter()
+                                        .filter(|id| {
+                                            app.settings.agents.iter().any(|a| a.id == **id)
+                                        })
+                                        .count()
+                                })
+                                .unwrap_or(0);
+                            if member_count < 2 {
+                                app.panel = Panel::Settings;
+                                app.settings_tab = SettingsTab::Agents;
+                            } else {
+                                app.settings.agent_mode = true;
+                            }
+                        } else if app.settings.agents.is_empty() {
+                            app.panel = Panel::Settings;
+                            app.settings_tab = SettingsTab::Agents;
+                        } else {
+                            if app.settings.active_agent.is_none() {
+                                app.settings.active_agent =
+                                    app.settings.agents.first().map(|agent| agent.id);
+                            }
+                            app.settings.agent_mode = app.settings.active_agent.is_some();
+                        }
+                    }
                     if icon_button(ui, icon_plus, "Add image or file") {
                         app.pick_attachment();
                     }
-                    let search_label = if app.settings.web_search {
+                    if app.settings.agent_mode {
+                        egui::ComboBox::from_id_salt("agent_picker")
+                            .selected_text(RichText::new(active_name).size(12.0).color(TEXT))
+                            .show_ui(ui, |ui| {
+                                if ui
+                                    .selectable_label(
+                                        app.settings.active_agent.is_none()
+                                            && app.settings.active_group.is_none(),
+                                        "Default",
+                                    )
+                                    .clicked()
+                                {
+                                    app.settings.active_agent = None;
+                                    app.settings.active_group = None;
+                                    app.settings.agent_mode = false;
+                                }
+                                for agent in &app.settings.agents {
+                                    if ui
+                                        .selectable_label(
+                                            app.settings.active_agent == Some(agent.id),
+                                            &agent.name,
+                                        )
+                                        .clicked()
+                                    {
+                                        app.settings.active_agent = Some(agent.id);
+                                        app.settings.active_group = None;
+                                    }
+                                }
+                                if !app.settings.groups.is_empty() {
+                                    ui.separator();
+                                    ui.label(
+                                        RichText::new("Agent groups").size(11.0).color(TEXT_SEC),
+                                    );
+                                    for group in &app.settings.groups {
+                                        let member_count = group.agent_ids.len();
+                                        let label = format!("{} ({member_count})", group.name);
+                                        if ui
+                                            .selectable_label(
+                                                app.settings.active_group == Some(group.id),
+                                                label,
+                                            )
+                                            .clicked()
+                                        {
+                                            app.settings.active_group = Some(group.id);
+                                            app.settings.active_agent = None;
+                                            if group.agent_ids.len() < 2 {
+                                                app.settings.agent_mode = false;
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                    }
+                    let search_label = if effective_search {
                         "Web search on"
                     } else {
                         "Web search"
                     };
-                    let search_color = if app.settings.web_search {
-                        ACCENT
-                    } else {
-                        TEXT_SEC
-                    };
+                    let search_color = if effective_search { ACCENT } else { TEXT_SEC };
                     if ui
                         .add(
                             Label::new(RichText::new(search_label).size(12.0).color(search_color))
@@ -1793,12 +1902,34 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                         .on_hover_text("Toggle web search")
                         .clicked()
                     {
-                        app.settings.web_search = !app.settings.web_search;
+                        if let Some(agent) = app
+                            .settings
+                            .agents
+                            .iter_mut()
+                            .find(|a| Some(a.id) == active_agent_id)
+                        {
+                            agent.web_search = !agent.web_search;
+                        } else {
+                            app.settings.web_search = !app.settings.web_search;
+                        }
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let (rect, resp) =
                             ui.allocate_exact_size(Vec2::splat(30.0), Sense::click());
-                        let resp = resp.on_hover_cursor(egui::CursorIcon::PointingHand);
+                        let resp = resp
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .on_hover_text(
+                                if generating
+                                    && app.settings.agent_mode
+                                    && app.settings.active_group.is_some()
+                                {
+                                    "Interrupt group discussion"
+                                } else if generating {
+                                    "Stop generation"
+                                } else {
+                                    "Send message"
+                                },
+                            );
                         let enabled = !app.prompt.trim().is_empty() || has_image || has_file;
                         let hover = ui.ctx().animate_bool(resp.id, resp.hovered() && enabled);
                         let radius = 15.0 * (1.0 + 0.08 * hover);
@@ -1844,10 +1975,7 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                                 .selected_text(
                                     RichText::new(format!(
                                         "Model   {}",
-                                        truncate(
-                                            &app.settings.display_name(&app.settings.model),
-                                            22
-                                        )
+                                        truncate(&app.settings.display_name(&selected_model), 22)
                                     ))
                                     .size(12.0)
                                     .color(TEXT),
@@ -1878,11 +2006,21 @@ fn input_bar(app: &mut App, ui: &mut Ui) {
                                     ui.separator();
                                     for m in &models {
                                         let label = app.settings.display_name(m);
-                                        ui.selectable_value(
-                                            &mut app.settings.model,
-                                            m.clone(),
-                                            label,
-                                        );
+                                        if ui
+                                            .selectable_label(selected_model == *m, label)
+                                            .clicked()
+                                        {
+                                            if let Some(agent) = app
+                                                .settings
+                                                .agents
+                                                .iter_mut()
+                                                .find(|a| Some(a.id) == active_agent_id)
+                                            {
+                                                agent.model = m.clone();
+                                            } else {
+                                                app.settings.model = m.clone();
+                                            }
+                                        }
                                     }
                                 });
                         });
@@ -1976,6 +2114,280 @@ fn settings_nav_item(ui: &mut Ui, label: &str, selected: bool) -> bool {
 
 fn settings_content(app: &mut App, ui: &mut Ui) {
     match app.settings_tab {
+        SettingsTab::Agents => {
+            heading(ui, "AGENTS");
+            ui.label(
+                RichText::new(
+                    "Create focused assistants with their own model and response settings. Choose one in the composer, then click the robot to turn on Agent Mode.",
+                )
+                .size(11.0)
+                .color(TEXT_SEC),
+            );
+            ui.add_space(8.0);
+            card(ui, |ui| {
+                ui.label(RichText::new("Agent workspace").size(11.0).color(TEXT_SEC));
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(&app.settings.workspace_root)
+                            .size(11.0)
+                            .color(TEXT),
+                    );
+                    if settings_button(ui, "Choose folder").clicked() {
+                        if let Some(path) = rfd::FileDialog::new().pick_folder() {
+                            app.settings.workspace_root = path.display().to_string();
+                        }
+                    }
+                });
+                ui.label(
+                    RichText::new("File tools are confined here. Commands start here but can access other locations.")
+                        .size(10.0)
+                        .color(TEXT_TER),
+                );
+            });
+            ui.add_space(8.0);
+            if ui
+                .add_sized(
+                    Vec2::new(ui.available_width(), 34.0),
+                    egui::Button::new("Create agent").fill(Color32::from_rgb(42, 43, 48)),
+                )
+                .clicked()
+            {
+                let agent = Agent::default();
+                app.settings.active_agent = Some(agent.id);
+                app.settings.agents.push(agent);
+            }
+            ui.add_space(8.0);
+            if !app.settings.agents.is_empty() {
+                let agent_tabs: Vec<(uuid::Uuid, String)> = app
+                    .settings
+                    .agents
+                    .iter()
+                    .map(|agent| (agent.id, agent.name.clone()))
+                    .collect();
+                ui.columns(agent_tabs.len(), |columns| {
+                    for (column, (agent_id, name)) in columns.iter_mut().zip(agent_tabs.iter()) {
+                        let width = column.available_width();
+                        let selected = app.settings.active_agent == Some(*agent_id);
+                        if column
+                            .add_sized(
+                                Vec2::new(width, 34.0),
+                                egui::Button::new(name).fill(if selected {
+                                    ACCENT.gamma_multiply(0.28)
+                                } else {
+                                    Color32::from_rgb(35, 36, 40)
+                                }),
+                            )
+                            .clicked()
+                        {
+                            app.settings.active_agent = Some(*agent_id);
+                            app.settings.active_group = None;
+                        }
+                    }
+                });
+                ui.add_space(8.0);
+            }
+            let selected = app.settings.active_agent;
+            if let Some(index) = app
+                .settings
+                .agents
+                .iter()
+                .position(|a| Some(a.id) == selected)
+            {
+                let models = app.model_list();
+                let mut remove = false;
+                card(ui, |ui| {
+                    ui.label(RichText::new("Name").size(11.0).color(TEXT_SEC));
+                    ui.add(
+                        TextEdit::singleline(&mut app.settings.agents[index].name)
+                            .desired_width(300.0),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("Purpose").size(11.0).color(TEXT_SEC));
+                    ui.add(
+                        TextEdit::singleline(&mut app.settings.agents[index].purpose)
+                            .hint_text("What this agent is for")
+                            .desired_width(420.0),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(RichText::new("Instructions").size(11.0).color(TEXT_SEC));
+                    ui.add(
+                        TextEdit::multiline(&mut app.settings.agents[index].instructions)
+                            .hint_text("How this agent should respond")
+                            .desired_rows(4)
+                            .desired_width(f32::INFINITY),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new("Persistent memory")
+                            .size(11.0)
+                            .color(TEXT_SEC),
+                    );
+                    ui.add(
+                        TextEdit::multiline(&mut app.settings.agents[index].memory)
+                            .hint_text(
+                                "Facts and preferences this agent should remember between chats",
+                            )
+                            .desired_rows(3)
+                            .desired_width(f32::INFINITY),
+                    );
+                    ui.add_space(6.0);
+                    egui::ComboBox::from_id_salt("agent_model_setting")
+                        .selected_text(if app.settings.agents[index].model.is_empty() {
+                            format!(
+                                "Default model ({})",
+                                app.settings.display_name(&app.settings.model)
+                            )
+                        } else {
+                            app.settings.display_name(&app.settings.agents[index].model)
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(
+                                &mut app.settings.agents[index].model,
+                                String::new(),
+                                "Use default model",
+                            );
+                            for model in &models {
+                                let label = app.settings.display_name(model);
+                                ui.selectable_value(
+                                    &mut app.settings.agents[index].model,
+                                    model.clone(),
+                                    label,
+                                );
+                            }
+                        });
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut app.settings.agents[index].web_search, "Web search");
+                        ui.checkbox(&mut app.settings.agents[index].thinking, "Thinking");
+                    });
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut app.settings.agents[index].file_access, "Project files");
+                        ui.checkbox(
+                            &mut app.settings.agents[index].command_access,
+                            "Run commands",
+                        );
+                        ui.checkbox(
+                            &mut app.settings.agents[index].desktop_access,
+                            "Desktop control",
+                        );
+                    });
+                    ui.checkbox(
+                        &mut app.settings.agents[index].vision_capable,
+                        "This model can inspect images",
+                    );
+                    if app.settings.agents[index].desktop_access {
+                        ui.label(RichText::new("When needed, screenshots are sent to the selected model provider for screen understanding.").size(10.0).color(TEXT_TER));
+                    }
+                    ui.checkbox(
+                        &mut app.settings.agents[index].vision_capable,
+                        "Model can inspect images (for hosted providers)",
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut app.settings.agents[index].max_tokens, 256..=16384)
+                            .text("Max output tokens per step"),
+                    );
+                    ui.add(
+                        egui::Slider::new(&mut app.settings.agents[index].max_actions, 1..=40)
+                            .text("Maximum tool actions per task"),
+                    );
+                    remove = ui
+                        .add_sized(
+                            Vec2::new(ui.available_width(), 32.0),
+                            egui::Button::new("Delete agent").fill(Color32::from_rgb(70, 35, 39)),
+                        )
+                        .clicked();
+                });
+                if remove {
+                    let removed_id = app.settings.agents[index].id;
+                    app.settings.agents.remove(index);
+                    app.settings.active_agent = None;
+                    app.settings.agent_mode = false;
+                    for group in &mut app.settings.groups {
+                        group.agent_ids.retain(|id| *id != removed_id);
+                    }
+                }
+            }
+
+            ui.add_space(28.0);
+            heading(ui, "AGENT GROUPS");
+            ui.label(RichText::new("Combine agents with different roles. They can discuss, ask one another questions, and produce a shared answer.").size(11.0).color(TEXT_SEC));
+            ui.add_space(8.0);
+            if ui
+                .add_sized(
+                    Vec2::new(ui.available_width(), 34.0),
+                    egui::Button::new("Create group").fill(Color32::from_rgb(42, 43, 48)),
+                )
+                .clicked()
+            {
+                let group = AgentGroup::default();
+                app.settings.active_group = Some(group.id);
+                app.settings.active_agent = None;
+                app.settings.agent_mode = false;
+                app.settings.groups.push(group);
+            }
+            let group_selected = app.settings.active_group;
+            if let Some(index) = app
+                .settings
+                .groups
+                .iter()
+                .position(|g| Some(g.id) == group_selected)
+            {
+                let mut remove_group = false;
+                let agents = app.settings.agents.clone();
+                card(ui, |ui| {
+                    ui.label(RichText::new("Group name").size(11.0).color(TEXT_SEC));
+                    ui.add(
+                        TextEdit::singleline(&mut app.settings.groups[index].name)
+                            .desired_width(300.0),
+                    );
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new("Members (choose at least two)")
+                            .size(11.0)
+                            .color(TEXT_SEC),
+                    );
+                    for agent in &agents {
+                        let mut included = app.settings.groups[index].agent_ids.contains(&agent.id);
+                        if ui
+                            .checkbox(&mut included, format!("{} — {}", agent.name, agent.purpose))
+                            .changed()
+                        {
+                            let members = &mut app.settings.groups[index].agent_ids;
+                            if included && !members.contains(&agent.id) {
+                                members.push(agent.id);
+                            }
+                            if !included {
+                                members.retain(|id| *id != agent.id);
+                            }
+                            if app.settings.agent_mode
+                                && app.settings.active_group == Some(app.settings.groups[index].id)
+                                && app.settings.groups[index].agent_ids.len() < 2
+                            {
+                                app.settings.agent_mode = false;
+                            }
+                        }
+                    }
+                    if agents.is_empty() {
+                        ui.label(
+                            RichText::new("Create agents above before adding group members.")
+                                .size(11.0)
+                                .color(TEXT_TER),
+                        );
+                    }
+                    ui.add_space(6.0);
+                    remove_group = ui
+                        .add_sized(
+                            Vec2::new(ui.available_width(), 32.0),
+                            egui::Button::new("Delete group").fill(Color32::from_rgb(70, 35, 39)),
+                        )
+                        .clicked();
+                });
+                if remove_group {
+                    app.settings.groups.remove(index);
+                    app.settings.active_group = None;
+                    app.settings.agent_mode = false;
+                }
+            }
+        }
         SettingsTab::General => {
             heading(ui, "PROFILE");
             card(ui, |ui| {
@@ -1984,20 +2396,16 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                     let (r, _) = ui.allocate_exact_size(Vec2::splat(64.0), Sense::hover());
                     avatar_at(ui, app.avatar.as_ref(), r, &initial);
                     ui.vertical(|ui| {
-                        ui.label(
-                            RichText::new("Display name")
-                                .size(10.0)
-                                .color(TEXT_SEC),
-                        );
+                        ui.label(RichText::new("Display name").size(10.0).color(TEXT_SEC));
                         ui.add(
                             TextEdit::singleline(&mut app.settings.user_name).desired_width(240.0),
                         );
                         ui.horizontal(|ui| {
-                            if ui.button("Change Photo").clicked() {
+                            if settings_button(ui, "Change Photo").clicked() {
                                 let ctx = ui.ctx().clone();
                                 app.import_avatar(&ctx);
                             }
-                            if app.avatar.is_some() && ui.button("Remove").clicked() {
+                            if app.avatar.is_some() && settings_button(ui, "Remove").clicked() {
                                 app.remove_avatar_file();
                             }
                         });
@@ -2015,7 +2423,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                     .color(TEXT_SEC),
                 );
                 ui.add_space(8.0);
-                if ui.button("Sign out").clicked() {
+                if settings_button(ui, "Sign out").clicked() {
                     app.sign_out();
                 }
             });
@@ -2087,7 +2495,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                         });
                         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                             if app.rename_model.as_deref() == Some(m.as_str()) {
-                                if ui.button("Save").clicked() {
+                                if settings_button(ui, "Save").clicked() {
                                     let t = app.rename_text.trim().to_string();
                                     if t.is_empty() || t == m {
                                         app.settings.model_names.remove(&m);
@@ -2099,7 +2507,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                                 ui.add(
                                     TextEdit::singleline(&mut app.rename_text).desired_width(160.0),
                                 );
-                            } else if ui.button("Rename").clicked() {
+                            } else if settings_button(ui, "Rename").clicked() {
                                 app.rename_text = app.settings.display_name(&m);
                                 app.rename_model = Some(m.clone());
                             }
@@ -2113,34 +2521,61 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
         SettingsTab::Api => {
             heading(ui, "API PROVIDER");
             ui.label(
-                RichText::new("Use Ollama locally, or an OpenAI-compatible external API.")
+                RichText::new("Use Ollama locally, or connect an OpenAI, Anthropic, Gemini, or compatible API.")
                     .size(11.0)
                     .color(TEXT_SEC),
             );
             ui.add_space(6.0);
             card(ui, |ui| {
                 row(ui, "Provider", |ui| {
+                    let previous_provider = app.settings.api_provider.clone();
                     egui::ComboBox::from_id_salt("api_provider")
-                        .selected_text(if app.settings.api_provider == "openai" {
-                            "OpenAI-compatible"
-                        } else {
-                            "Ollama"
+                        .selected_text(match app.settings.api_provider.as_str() {
+                            "openai" => "OpenAI-compatible",
+                            "anthropic" => "Anthropic",
+                            "gemini" => "Gemini",
+                            _ => "Ollama",
                         })
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut app.settings.api_provider, "ollama".into(), "Ollama");
+                            ui.selectable_value(
+                                &mut app.settings.api_provider,
+                                "ollama".into(),
+                                "Ollama",
+                            );
+                            ui.selectable_value(
+                                &mut app.settings.api_provider,
+                                "anthropic".into(),
+                                "Anthropic",
+                            );
+                            ui.selectable_value(
+                                &mut app.settings.api_provider,
+                                "gemini".into(),
+                                "Gemini",
+                            );
                             ui.selectable_value(
                                 &mut app.settings.api_provider,
                                 "openai".into(),
                                 "OpenAI-compatible",
                             );
                         });
+                    if app.settings.api_provider != previous_provider {
+                        app.settings.api_base = match app.settings.api_provider.as_str() {
+                            "anthropic" => "https://api.anthropic.com/v1".into(),
+                            "gemini" => "https://generativelanguage.googleapis.com/v1beta".into(),
+                            _ => "https://api.openai.com/v1".into(),
+                        };
+                    }
                 });
                 ui.add_space(8.0);
                 ui.label(RichText::new("Base URL").color(TEXT));
                 ui.add(
                     TextEdit::singleline(&mut app.settings.api_base)
                         .desired_width(f32::INFINITY)
-                        .hint_text("https://api.openai.com/v1"),
+                        .hint_text(match app.settings.api_provider.as_str() {
+                            "anthropic" => "https://api.anthropic.com/v1",
+                            "gemini" => "https://generativelanguage.googleapis.com/v1beta",
+                            _ => "https://api.openai.com/v1",
+                        }),
                 );
                 ui.add_space(8.0);
                 ui.label(RichText::new("API key").color(TEXT));
@@ -2152,7 +2587,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                 );
             });
             ui.horizontal(|ui| {
-                if ui.button("Test & Refresh Models").clicked() {
+                if settings_button(ui, "Test & Refresh Models").clicked() {
                     let ctx = ui.ctx().clone();
                     app.refresh_models(&ctx);
                 }
@@ -2178,7 +2613,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                 );
             });
             ui.horizontal(|ui| {
-                if ui.button("Test & Refresh Models").clicked() {
+                if settings_button(ui, "Test & Refresh Models").clicked() {
                     let ctx = ui.ctx().clone();
                     app.refresh_models(&ctx);
                 }
@@ -2210,7 +2645,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                 );
             });
             ui.horizontal(|ui| {
-                if ui.button("Test Connection").clicked() {
+                if settings_button(ui, "Test Connection").clicked() {
                     let ctx = ui.ctx().clone();
                     app.check_searx(&ctx);
                 }
@@ -2252,7 +2687,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                         .color(TEXT_SEC),
                 );
                 ui.add_space(8.0);
-                if ui.button("Export Windows Icon (.ico)").clicked() {
+                if settings_button(ui, "Export Windows Icon (.ico)").clicked() {
                     app.export_icon();
                 }
                 if !app.icon_status.is_empty() {
@@ -2270,7 +2705,7 @@ fn settings_content(app: &mut App, ui: &mut Ui) {
                         .color(TEXT_SEC),
                 );
                 ui.add_space(8.0);
-                if ui.button("Open Profile Folder").clicked() {
+                if settings_button(ui, "Open Profile Folder").clicked() {
                     let _ = std::fs::create_dir_all(data_dir());
                     let _ = open::that(data_dir());
                 }

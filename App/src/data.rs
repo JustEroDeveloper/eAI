@@ -26,6 +26,70 @@ pub struct Settings {
     pub searx_slots: Vec<String>,
     pub searx_active: usize,
     pub model_names: HashMap<String, String>,
+    pub agents: Vec<Agent>,
+    pub active_agent: Option<Uuid>,
+    pub agent_mode: bool,
+    pub groups: Vec<AgentGroup>,
+    pub active_group: Option<Uuid>,
+    pub workspace_root: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(default)]
+pub struct Agent {
+    pub id: Uuid,
+    pub name: String,
+    pub purpose: String,
+    pub instructions: String,
+    pub memory: String,
+    pub model: String,
+    pub web_search: bool,
+    pub thinking: bool,
+    pub max_tokens: u32,
+    pub max_actions: u32,
+    pub file_access: bool,
+    pub command_access: bool,
+    pub desktop_access: bool,
+    pub vision_capable: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(default)]
+pub struct AgentGroup {
+    pub id: Uuid,
+    pub name: String,
+    pub agent_ids: Vec<Uuid>,
+}
+
+impl Default for AgentGroup {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: "New group".into(),
+            agent_ids: Vec::new(),
+        }
+    }
+}
+
+impl Default for Agent {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: "New agent".into(),
+            purpose: String::new(),
+            instructions: String::new(),
+            memory: String::new(),
+            model: String::new(),
+            web_search: true,
+            thinking: true,
+            max_tokens: 4096,
+            max_actions: 20,
+            file_access: true,
+            command_access: true,
+            desktop_access: true,
+            vision_capable: false,
+        }
+    }
 }
 
 impl Default for Settings {
@@ -46,6 +110,12 @@ impl Default for Settings {
             searx_slots: vec![DEFAULT_SEARX.into()],
             searx_active: 0,
             model_names: HashMap::new(),
+            agents: Vec::new(),
+            active_agent: None,
+            agent_mode: false,
+            groups: Vec::new(),
+            active_group: None,
+            workspace_root: env!("CARGO_MANIFEST_DIR").into(),
         }
     }
 }
@@ -100,6 +170,12 @@ pub struct Message {
     pub created_at: i64,
     pub thinking: String,
     pub model: String,
+    #[serde(skip)]
+    pub progress: String,
+    #[serde(default)]
+    pub tool_log: Vec<String>,
+    #[serde(default)]
+    pub group_speaker: Option<String>,
     pub sources: Vec<Source>,
     /// Attached image bytes (JPEG). Not saved to disk to keep conversations small.
     #[serde(skip)]
@@ -118,6 +194,9 @@ impl Default for Message {
             created_at: 0,
             thinking: String::new(),
             model: String::new(),
+            progress: String::new(),
+            tool_log: Vec::new(),
+            group_speaker: None,
             sources: Vec::new(),
             image: None,
             attachment: None,

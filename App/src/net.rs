@@ -53,6 +53,71 @@ pub fn fetch_models_openai(base: &str, key: &str) -> Result<Vec<String>, String>
         .unwrap_or_default())
 }
 
+pub fn fetch_models_api(base: &str, key: &str, provider: &str) -> Result<Vec<String>, String> {
+    let url = format!("{}/models", base.trim_end_matches('/'));
+    let mut req = client(15)?.get(url);
+    match provider {
+        "anthropic" => {
+            req = req
+                .header("x-api-key", key.trim())
+                .header("anthropic-version", "2023-06-01");
+        }
+        "gemini" => {
+            req = req.header("x-goog-api-key", key.trim());
+        }
+        _ if !key.trim().is_empty() => {
+            req = req.bearer_auth(key.trim());
+        }
+        _ => {}
+    }
+    let resp = req.send().map_err(|e| format!("API not reachable: {e}"))?;
+    let status = resp.status();
+    let body = resp.text().unwrap_or_default();
+    if !status.is_success() {
+        return Err(format!(
+            "API returned HTTP {}: {}",
+            status.as_u16(),
+            body.chars().take(240).collect::<String>()
+        ));
+    }
+    let v: Value =
+        serde_json::from_str(&body).map_err(|e| format!("Invalid models response: {e}"))?;
+    if provider == "gemini" {
+        Ok(v["models"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|m| {
+                        m["supportedGenerationMethods"]
+                            .as_array()
+                            .map_or(true, |methods| {
+                                methods
+                                    .iter()
+                                    .any(|s| s.as_str() == Some("generateContent"))
+                            })
+                    })
+                    .filter_map(|m| {
+                        m["name"]
+                            .as_str()
+                            .map(|s| s.strip_prefix("models/").unwrap_or(s).to_string())
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    } else {
+        Ok(v["data"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|m| m["id"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+}
+
 /// True when Ollama reports the "vision" capability for the model.
 pub fn model_supports_vision(host: &str, model: &str) -> bool {
     let Ok(c) = client(5) else { return false };
