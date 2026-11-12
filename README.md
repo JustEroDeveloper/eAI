@@ -4,6 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey)](#-installation)
 
+
+# REPO WAS MOVED TO : https://github.com/embeddiumAI
 > ⚠️ **NOT FULLY STABLE — STILL IN DEVELOPMENT**
 
 A high-performance, privacy-focused, native macOS and Windows local AI client built with **Rust**, **eframe/egui**, **Swift** and **tokio** — featuring a sleek macOS-inspired dark-mode interface and real-time local model streaming via **Ollama**.
