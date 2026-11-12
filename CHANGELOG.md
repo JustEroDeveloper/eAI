@@ -2,6 +2,8 @@
 
 ### Added
 - Redesigned macOS installer: the `.dmg` now opens with a drag-to-Applications window.
+### Changed
+- Installer window is smaller (1100x730) instead of filling the screen.
 
 ## [Beta 7.4] - 2026-11-11
 
