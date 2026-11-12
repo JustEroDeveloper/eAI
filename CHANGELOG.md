@@ -1,3 +1,8 @@
+## [Beta 7.4.2] - 2026-11-12
+
+### Fixed
+- macOS installer window no longer opens fullscreen; now opens at 1100x730.
+
 ## [Beta 7.4.1] - 2026-11-11
 
 ### Added
