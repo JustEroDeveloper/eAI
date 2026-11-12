@@ -2,12 +2,7 @@
 
 ## Supported Versions
 
-| Version | Supported |
-| ------- | :-------: |
-| eAI (macOS) | :white_check_mark: |
-| eAI Lite (macOS) | :white_check_mark: |
-| eAI Lite (Windows) | :white_check_mark: |
-| eAI (Windows) | :x: (planned) |
+NO SECURITY SUPPORT FOR THIS REPO THE REPO WAS MOVED https://github.com/embeddiumAI
 
 ## Reporting a Vulnerability
 
