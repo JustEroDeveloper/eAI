@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-NO SECURITY SUPPORT FOR THIS REPO THE REPO WAS MOVED https://github.com/embeddiumAI
+# NO SECURITY SUPPORT FOR THIS REPO THE REPO WAS MOVED https://github.com/embeddiumAI
 
 ## Reporting a Vulnerability
 
