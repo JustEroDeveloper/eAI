@@ -3,8 +3,11 @@
 [![Release](https://img.shields.io/github/v/release/JustEroDeveloper/eAI?include_prereleases&label=release&color=blue)](https://github.com/JustEroDeveloper/eAI/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-lightgrey)](#-installation)
-<a href="bitcoin:bc1qwhf90dyjw7x6cm7t8y4g7tjxps90fkm6vd5u5s?label=eAI">Donate with Bitcoin</a>
 
+## Support this project
+
+You can donate bitcoin only for now i dont have anything else:
+`bc1qwhf90dyjw7x6cm7t8y4g7tjxps90fkm6vd5u5s`
 
 # REPO WAS MOVED TO : https://github.com/embeddiumAI
 > ⚠️ **NOT FULLY STABLE — STILL IN DEVELOPMENT**
